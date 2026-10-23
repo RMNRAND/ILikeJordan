@@ -18,7 +18,7 @@ The deployed Worker origin is configured as the default. Set `VITE_SIGNALING_URL
 2. Enable GitHub Pages with **GitHub Actions** as the build and deployment source.
 3. Push to `main`; `.github/workflows/pages.yml` builds and deploys the static app.
 
-The Worker workflow uses `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets. The token needs Workers Scripts edit and account read permissions. The browser-based Wrangler login is enough for a one-time local deployment.
+The Worker workflow uses `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets. Add them under repository **Settings → Secrets and variables → Actions** to enable automatic Worker updates. Create a scoped Cloudflare API token with Workers Scripts edit and account read permissions; never put the token in source control or chat. Until those secrets exist, the already-deployed Worker stays live and CI skips Worker redeployment. The browser-based Wrangler login is enough for a one-time local deployment.
 
 ## Limits and privacy
 
