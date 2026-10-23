@@ -142,8 +142,7 @@ function App() {
   const handleSignal = async (from, payload) => {
     let connection = connectionsRef.current.get(from)
     if (payload.type === 'offer') {
-      if (connection) connection.close()
-      connection = createConnection(from, false)
+      if (!connection) connection = createConnection(from, false)
       await connection.setRemoteDescription(payload.description)
       for (const candidate of queuedIceRef.current.get(from) || []) await connection.addIceCandidate(candidate)
       queuedIceRef.current.delete(from)
@@ -164,6 +163,7 @@ function App() {
     setHostId(newHostId)
     hostIdRef.current = newHostId
     closeConnections()
+    setConnectedPeers([])
     if (newHostId === peerIdRef.current) {
       roster.forEach((player) => createConnection(player.id, true))
     } else if (newHostId) {
