@@ -3,6 +3,12 @@ import './App.css'
 
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || 'https://tabletalk-signaling.k2tfbvzgpm.workers.dev'
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
+const GAMES = [
+  { id: 'chess', name: 'Chess', detail: 'Classic strategy' },
+  { id: 'catan', name: 'Catan', detail: 'Trade and build' },
+  { id: 'ticket-to-ride', name: 'Ticket to Ride', detail: 'Routes and railways' },
+  { id: 'custom', name: 'Other game', detail: 'Bring your own rules' },
+]
 const makeId = () => crypto.randomUUID()
 const makeCode = () => Array.from({ length: 6 }, () => String.fromCharCode(65 + Math.random() * 26)).join('')
 
@@ -10,6 +16,9 @@ function App() {
   const [name, setName] = useState(() => localStorage.getItem('player-name') || '')
   const [codeInput, setCodeInput] = useState('')
   const [roomCode, setRoomCode] = useState('')
+  const [selectedGame, setSelectedGame] = useState('chess')
+  const [gameStarted, setGameStarted] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [peerId, setPeerId] = useState('')
   const [players, setPlayers] = useState([])
   const [connectedPeers, setConnectedPeers] = useState([])
@@ -178,7 +187,7 @@ function App() {
     setRoomCode(code)
     setLinkState('signaling')
     setNotice('')
-    const endpoint = new URL(`/room/${code}`, SIGNALING_URL)
+    const endpoint = new URL(`/room/${code}`, SIGNALING_URL.replace(/^http/, 'ws'))
     const socket = new WebSocket(endpoint)
     socketRef.current = socket
     socket.onopen = () => socket.send(JSON.stringify({ type: 'join', peerId: id, name: name.trim() }))
@@ -190,6 +199,8 @@ function App() {
           updatePlayers(message.players || [])
           setHostId(message.hostId || id)
           hostIdRef.current = message.hostId || id
+          setSelectedGame(message.gameId || 'chess')
+          setGameStarted(Boolean(message.gameStarted))
           if ((message.hostId || id) === id) (message.players || []).forEach((player) => createConnection(player.id, true))
           else createConnection(message.hostId, false)
         }
@@ -201,6 +212,8 @@ function App() {
             return
           }
           updatePlayers(roster)
+          if (message.gameId) setSelectedGame(message.gameId)
+          if (typeof message.gameStarted === 'boolean') setGameStarted(message.gameStarted)
           if (message.hostId && message.hostId !== hostIdRef.current) setHost(message.hostId, roster)
           else if (hostIdRef.current === id) {
             const newcomer = message.players?.find((player) => !connectionsRef.current.has(player.id) && !connectedPeers.includes(player.id))
@@ -212,6 +225,8 @@ function App() {
             channelsRef.current.delete(message.leftId)
           }
         }
+        if (message.type === 'game') setSelectedGame(message.gameId)
+        if (message.type === 'game-started') setGameStarted(true)
         if (message.type === 'signal') await handleSignal(message.from, message.payload)
         if (message.type === 'error') {
           setNotice(message.message || 'Could not join this lobby.')
@@ -252,6 +267,8 @@ function App() {
     socketRef.current = null
     closeConnections()
     setRoomCode('')
+    setGameStarted(false)
+    setMenuOpen(false)
     setPeerId('')
     setPlayers([])
     setConnectedPeers([])
@@ -260,10 +277,22 @@ function App() {
     setNotice('')
   }
 
+  const chooseGame = (gameId) => {
+    if (!isHost || !GAMES.some((game) => game.id === gameId)) return
+    setSelectedGame(gameId)
+    socketRef.current?.send(JSON.stringify({ type: 'game', gameId }))
+  }
+
+  const startGame = () => {
+    if (!isHost || !connectedPeers.length) return
+    socketRef.current?.send(JSON.stringify({ type: 'start' }))
+    setGameStarted(true)
+  }
+
   const sendTurn = (event) => {
     event.preventDefault()
     const text = turnText.trim()
-    if (!text || linkState !== 'connected') return
+    if (!text || !hasTurnPath) return
     publishEvent({ id: makeId(), player: name.trim(), text, time: Date.now() })
     setTurnText('')
     setNotice('')
@@ -275,6 +304,7 @@ function App() {
   }
 
   const isHost = peerId === hostId
+  const hasTurnPath = isHost ? connectedPeers.length > 0 : connectedPeers.includes(hostId)
 
   return (
     <main className="app-shell">
@@ -306,11 +336,31 @@ function App() {
           </section>
           <div className="home-footer"><span>TABLETALK / 001</span><span>THE GAME STAYS WITH YOU</span><span>SCROLL NOT REQUIRED</span></div>
         </section>
+      ) : !gameStarted ? (
+        <section className="room-view">
+          <div className="room-head">
+            <div><button className="back-button" onClick={leaveLobby}>← Leave table</button><p className="eyebrow">LOBBY / {isHost ? 'HOST' : 'PLAYER'}</p><h1>Set up the <em>table.</em></h1></div>
+            <div className="room-code-wrap"><span className="field-label">INVITE PLAYERS</span><button className="room-code" onClick={copyCode} title="Copy lobby code">{roomCode}<span>▣</span></button></div>
+          </div>
+          {notice && <p className="notice room-notice" role="status">{notice}</p>}
+          <div className="setup-columns">
+            <section className="players-panel"><div className="section-heading"><h2>Players</h2><span>{players.length + 1} / 6</span></div>
+              <ul className="player-list"><li className="player-row"><span className="avatar self-avatar">{name.trim().slice(0, 1).toUpperCase()}</span><span className="player-name">{name} <small>YOU</small></span><span className="role-tag">{isHost ? 'HOST' : 'PLAYER'}</span><span className="connection-dot active" /></li>
+                {players.map((player) => <li className="player-row" key={player.id}><span className="avatar">{player.name.slice(0, 1).toUpperCase()}</span><span className="player-name">{player.name}</span><span className="role-tag">{player.id === hostId ? 'HOST' : 'PLAYER'}</span><span className={`connection-dot ${connectedPeers.includes(player.id) ? 'active' : ''}`} /></li>)}
+              </ul>
+              <div className="room-actions"><div><span className={`status-dot ${linkState}`} /><span>{linkState === 'connected' ? `${connectedPeers.length} direct link${connectedPeers.length === 1 ? '' : 's'} ready` : 'Connecting to players…'}</span></div>{isHost && players.length > 0 && <button className="text-button" onClick={() => socketRef.current?.send(JSON.stringify({ type: 'host', target: players[0].id }))}>Pass host</button>}</div>
+            </section>
+            <section className="game-select-panel"><div className="section-heading"><h2>Choose a game</h2><span>{isHost ? 'HOST PICKS' : 'HOST PICKING'}</span></div>
+              <div className="game-options" role="radiogroup" aria-label="Select a board game">{GAMES.map((game) => <button type="button" role="radio" aria-checked={selectedGame === game.id} disabled={!isHost} className={`game-option ${selectedGame === game.id ? 'selected' : ''}`} key={game.id} onClick={() => chooseGame(game.id)}><span className="game-choice-mark">{selectedGame === game.id ? '✓' : ''}</span><span><strong>{game.name}</strong><small>{game.detail}</small></span><span className="game-arrow">↗</span></button>)}</div>
+              <div className="start-area">{isHost ? <button className="primary-button start-button" disabled={!connectedPeers.length} onClick={startGame}>Start {GAMES.find((game) => game.id === selectedGame)?.name} <span aria-hidden="true">→</span></button> : <p className="waiting-copy">Waiting for the host to choose a game and start.</p>}<p className="connection-hint"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'Players connected directly' : 'Waiting for a direct player connection'}</p></div>
+            </section>
+          </div>
+        </section>
       ) : (
         <section className="room-view">
           <div className="room-head">
-            <div><button className="back-button" onClick={leaveLobby}>← Leave table</button><p className="eyebrow">LOBBY / {isHost ? 'HOST' : 'PLAYER'}</p><h1>You're at the <em>table.</em></h1></div>
-            <div className="room-code-wrap"><span className="field-label">SHARE THIS CODE</span><button className="room-code" onClick={copyCode} title="Copy lobby code">{roomCode}<span>▣</span></button></div>
+            <div><p className="eyebrow">IN GAME / {isHost ? 'HOST' : 'PLAYER'}</p><h1>{GAMES.find((game) => game.id === selectedGame)?.name || 'Game'} <em>in progress.</em></h1></div>
+            <div className="game-menu-wrap"><button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen}>☰ <span>Game menu</span></button>{menuOpen && <div className="game-menu" role="dialog" aria-label="In-game menu"><p className="eyebrow">TABLE MENU</p><strong>{GAMES.find((game) => game.id === selectedGame)?.name}</strong><span className="menu-player-count">{players.length + 1} players · {isHost ? 'Host' : 'Player'}</span><button onClick={() => setMenuOpen(false)}>Resume game <span>→</span></button><button className="menu-leave" onClick={leaveLobby}>Leave table <span>↗</span></button></div>}</div>
           </div>
           {notice && <p className="notice room-notice" role="status">{notice}</p>}
           <div className="room-columns">
@@ -321,7 +371,7 @@ function App() {
               <div className="room-actions"><div><span className={`status-dot ${linkState}`} /><span>{linkState === 'connected' ? 'Direct link ready' : 'Waiting for peer links'}</span></div>{isHost && players.length > 0 && <button className="text-button" onClick={() => socketRef.current?.send(JSON.stringify({ type: 'host', target: players[0].id }))}>Pass host to {players[0].name}</button>}</div>
               <div className="host-note"><span className="note-icon">↻</span><p>Host disconnects? The table elects a new host and restores the shared turn log from players still connected.</p></div>
             </section>
-            <section className="turn-panel"><div className="section-heading"><h2>Turn log</h2><span>{events.length} EVENTS</span></div><ol className="event-list">{events.map((item, index) => <li className="event-row" key={item.id}><span className="event-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.player}</strong><p>{item.text}</p></div><time>{new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>)}{!events.length && <li className="empty-log">No turns yet. Add the first move when the table is connected.</li>}</ol><form className="turn-form" onSubmit={sendTurn}><input value={turnText} maxLength={500} onChange={(event) => setTurnText(event.target.value)} placeholder="Record a move or turn…" aria-label="Turn update" disabled={linkState !== 'connected'} /><button className="primary-button" disabled={linkState !== 'connected' || !turnText.trim()}>Send turn <span aria-hidden="true">↑</span></button></form></section>
+            <section className="turn-panel"><div className="section-heading"><h2>Turn log</h2><span>{events.length} EVENTS</span></div><ol className="event-list">{events.map((item, index) => <li className="event-row" key={item.id}><span className="event-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.player}</strong><p>{item.text}</p></div><time>{new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>)}{!events.length && <li className="empty-log">No turns yet. Add the first move once at least one peer link is ready.</li>}</ol><form className="turn-form" onSubmit={sendTurn}><input value={turnText} maxLength={500} onChange={(event) => setTurnText(event.target.value)} placeholder={hasTurnPath ? 'Record a move or turn…' : 'Waiting for a direct connection…'} aria-label="Turn update" disabled={!hasTurnPath} /><button className="primary-button" disabled={!hasTurnPath || !turnText.trim()}>Send turn <span aria-hidden="true">↑</span></button></form></section>
           </div>
         </section>
       )}

@@ -27,6 +27,12 @@ export class LobbyRoom {
     this.peers = new Map()
     this.sockets = new Map()
     this.hostId = ''
+    this.gameId = 'chess'
+    this.gameStarted = false
+    this.state.blockConcurrencyWhile(async () => {
+      this.gameId = await this.state.storage.get('gameId') || 'chess'
+      this.gameStarted = Boolean(await this.state.storage.get('gameStarted'))
+    })
     this.state.getWebSockets().forEach((socket) => {
       const attachment = socket.deserializeAttachment()
       if (!attachment?.peerId || !attachment?.name) return
@@ -72,8 +78,8 @@ export class LobbyRoom {
       socket.serializeAttachment(peer)
       this.sockets.set(peer.peerId, socket)
       this.peers.set(peer.peerId, peer)
-      this.send(socket, { type: 'joined', hostId: this.hostId, players: this.list() })
-      this.broadcast({ type: 'membership', hostId: this.hostId, players: this.list() }, peer.peerId)
+      this.send(socket, { type: 'joined', hostId: this.hostId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted })
+      this.broadcast({ type: 'membership', hostId: this.hostId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted }, peer.peerId)
       return
     }
 
@@ -88,19 +94,27 @@ export class LobbyRoom {
         peer.host = peerId === this.hostId
         this.sockets.get(peerId)?.serializeAttachment(peer)
       })
-      this.broadcast({ type: 'membership', hostId: this.hostId, players: this.list() })
+      this.broadcast({ type: 'membership', hostId: this.hostId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted })
+    } else if (message.type === 'game' && attachment.peerId === this.hostId && ['chess', 'catan', 'ticket-to-ride', 'custom'].includes(message.gameId) && !this.gameStarted) {
+      this.gameId = message.gameId
+      await this.state.storage.put('gameId', this.gameId)
+      this.broadcast({ type: 'game', gameId: this.gameId })
+    } else if (message.type === 'start' && attachment.peerId === this.hostId && this.peers.size >= 2) {
+      this.gameStarted = true
+      await this.state.storage.put('gameStarted', true)
+      this.broadcast({ type: 'game-started', gameId: this.gameId })
     }
   }
 
   async webSocketClose(socket) {
-    this.removePeer(socket)
+    return this.removePeer(socket)
   }
 
   async webSocketError(socket) {
-    this.removePeer(socket)
+    return this.removePeer(socket)
   }
 
-  removePeer(socket) {
+  async removePeer(socket) {
     const attachment = socket.deserializeAttachment() || {}
     if (!attachment.peerId || this.sockets.get(attachment.peerId) !== socket) return
     this.sockets.delete(attachment.peerId)
@@ -112,7 +126,12 @@ export class LobbyRoom {
         this.sockets.get(peerId)?.serializeAttachment(peer)
       })
     }
-    if (this.peers.size) this.broadcast({ type: 'membership', hostId: this.hostId, leftId: attachment.peerId, players: this.list() })
+    if (this.peers.size) this.broadcast({ type: 'membership', hostId: this.hostId, leftId: attachment.peerId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted })
+    else {
+      this.gameId = 'chess'
+      this.gameStarted = false
+      await this.state.storage.deleteAll()
+    }
   }
 
   list() {
@@ -123,7 +142,7 @@ export class LobbyRoom {
     try {
       socket.send(JSON.stringify(message))
     } catch {
-      this.removePeer(socket)
+      void this.removePeer(socket)
     }
   }
 
