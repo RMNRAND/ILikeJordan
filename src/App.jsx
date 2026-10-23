@@ -216,7 +216,7 @@ function App() {
           if (typeof message.gameStarted === 'boolean') setGameStarted(message.gameStarted)
           if (message.hostId && message.hostId !== hostIdRef.current) setHost(message.hostId, roster)
           else if (hostIdRef.current === id) {
-            const newcomer = message.players?.find((player) => !connectionsRef.current.has(player.id) && !connectedPeers.includes(player.id))
+            const newcomer = message.players?.find((player) => player.id !== id && !connectionsRef.current.has(player.id) && !connectedPeers.includes(player.id))
             if (newcomer) createConnection(newcomer.id, true)
           }
           if (message.leftId) {
