@@ -1,0 +1,14 @@
+name = "tabletalk-signaling"
+main = "worker/index.js"
+compatibility_date = "2026-10-22"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGIN = "https://rmnrand.github.io"
+
+[durable_objects]
+bindings = [{ name = "ROOMS", class_name = "LobbyRoom" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LobbyRoom"]
