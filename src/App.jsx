@@ -206,11 +206,8 @@ function App() {
         }
         if (message.type === 'membership') {
           const roster = message.players || []
-          if (roster.length < 2) {
-            leaveLobby()
-            setNotice('Not enough connected players to continue. You can create or join another lobby.')
-            return
-          }
+          const previousHostId = hostIdRef.current
+          const hostLeft = message.leftId === previousHostId
           updatePlayers(roster)
           if (message.gameId) setSelectedGame(message.gameId)
           if (typeof message.gameStarted === 'boolean') setGameStarted(message.gameStarted)
@@ -223,6 +220,10 @@ function App() {
             connectionsRef.current.get(message.leftId)?.close()
             connectionsRef.current.delete(message.leftId)
             channelsRef.current.delete(message.leftId)
+          }
+          if (roster.length < 2 && hostLeft) {
+            leaveLobby()
+            setNotice('The host left and there are not enough players to continue. Join another lobby when ready.')
           }
         }
         if (message.type === 'game') setSelectedGame(message.gameId)
