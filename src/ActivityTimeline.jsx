@@ -41,6 +41,13 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
   const [touchStart, setTouchStart] = useState(null)
   const [profileMessage, setProfileMessage] = useState('')
   const [collage, setCollage] = useState(null)
+  const scrollBeforeCollage = useRef(0)
+
+  const openCollage = (next) => { scrollBeforeCollage.current = window.scrollY; setCollage(next) }
+  const closeCollage = () => {
+    setCollage(null)
+    requestAnimationFrame(() => window.scrollTo(0, scrollBeforeCollage.current))
+  }
   const fileInputRef = useRef(null)
   const previewsRef = useRef([])
   const groupIdRef = useRef(null)
@@ -200,6 +207,8 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
     setPlayOpen(false)
   }
 
+  if (collage) return <Collage key={collage.ids.join()} photos={items.filter((item) => collage.ids.includes(item.id))} startEditing={collage.editing} onSave={saveCollage} onClose={closeCollage} />
+
   return (
     <section className="activity-home">
       <div className="activity-heading">
@@ -233,7 +242,7 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
               {groupedCards(section.items).map((group) => {
                 const first = group[0]
                 if (first.kind === 'game') return <article className="game-memory" key={first.id}><div className="memory-topline"><span className="memory-type">GAME SAVED</span><time>{formatTime(first.date)}</time></div><div className="game-memory-symbol">♟</div><h2>{first.title}</h2>{first.note && <p>{first.note}</p>}<footer><span>{first.author}</span><span>{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(first.date))}</span></footer></article>
-                return <article className={`photo-memory ${group.length > 1 ? 'photo-memory-group' : ''}`} key={first.groupId || first.id}><button className="edit-pencil" aria-label="Edit collage" title="Edit collage" onClick={() => setCollage({ ids: group.map((photo) => photo.id), editing: true })}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z" /></svg></button><div className="photo-memory-grid" role="button" tabIndex={0} aria-label="Open collage" onClick={() => setCollage({ ids: group.map((photo) => photo.id), editing: false })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setCollage({ ids: group.map((photo) => photo.id), editing: false }) } }}>{group.map((photo) => <figure key={photo.id}><img src={`/api/activity/images/${photo.id}`} alt={photo.caption || 'Shared memory'} loading="lazy" /><figcaption>{photo.caption}</figcaption></figure>)}</div><div className="photo-memory-meta"><span>{first.author}{first.postCaption ? ` · ${first.postCaption}` : ''}</span><time>{formatTime(first.date)}</time></div></article>
+                return <article className={`photo-memory ${group.length > 1 ? 'photo-memory-group' : ''}`} key={first.groupId || first.id}><button className="edit-pencil" aria-label="Edit collage" title="Edit collage" onClick={() => openCollage({ ids: group.map((photo) => photo.id), editing: true })}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z" /></svg></button><div className="photo-memory-grid" role="button" tabIndex={0} aria-label="Open collage" onClick={() => openCollage({ ids: group.map((photo) => photo.id), editing: false })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setCollage({ ids: group.map((photo) => photo.id), editing: false }) } }}>{group.map((photo) => <figure key={photo.id}><img src={`/api/activity/images/${photo.id}`} alt={photo.caption || 'Shared memory'} loading="lazy" /><figcaption>{photo.caption}</figcaption></figure>)}</div><div className="photo-memory-meta"><span>{first.author}{first.postCaption ? ` · ${first.postCaption}` : ''}</span><time>{formatTime(first.date)}</time></div></article>
               })}
             </div>
           </section>
@@ -247,7 +256,6 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
             {message && <p className="notice" role="status">{message}</p>}<div className="modal-footer"><span>{uploading ? `Saving ${uploadProgress} / ${selectedFiles.length}…` : `${selectedFiles.length} / ${MAX_FILES} photos`}</span><button className="primary-button" disabled={!selectedFiles.length || uploading}>{uploading ? 'Saving…' : 'Save moment'} <span aria-hidden="true">↑</span></button></div></form></section></div>}
 
       {playOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlayOpen(false) }}><section className="activity-modal play-modal" role="dialog" aria-modal="true" aria-labelledby="play-title"><div className="modal-heading"><div><p className="eyebrow">PLAY TOGETHER</p><h2 id="play-title">Find a table</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setPlayOpen(false)}>×</button></div><p className="auth-copy">Start a new room or join with a six-letter code.</p><button className="primary-button" onClick={createGameLobby}>Create a lobby <span aria-hidden="true">↗</span></button><form className="play-join-form" onSubmit={joinGameLobby}><label className="field-label" htmlFor="activity-lobby-code">LOBBY CODE</label><div className="code-entry"><input id="activity-lobby-code" maxLength={6} autoCapitalize="characters" placeholder="ABCDEF" value={joinCode} onChange={(event) => setJoinCode(event.target.value.replace(/[^a-z]/gi, '').toUpperCase())} /><button className="join-button">Join <span aria-hidden="true">→</span></button></div></form></section></div>}
-      {collage && <Collage key={collage.ids.join()} photos={items.filter((item) => collage.ids.includes(item.id))} startEditing={collage.editing} onSave={saveCollage} onClose={() => setCollage(null)} />}
     </section>
   )
 }

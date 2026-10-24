@@ -116,12 +116,7 @@ function Collage({ photos, startEditing, onSave, onClose }) {
   const hideTimer = useRef(null)
 
   useEffect(() => () => clearTimeout(hideTimer.current), [])
-  useEffect(() => {
-    const previous = document.documentElement.style.overflow
-    document.documentElement.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
-    return () => { document.documentElement.style.overflow = previous; document.body.style.overflow = '' }
-  }, [])
+  useEffect(() => { window.scrollTo(0, 0) }, [])
   useEffect(() => {
     const onKey = (event) => { if (event.key === 'Escape' && !saving) onClose() }
     window.addEventListener('keydown', onKey)
@@ -172,7 +167,7 @@ function Collage({ photos, startEditing, onSave, onClose }) {
   }
 
   return (
-    <div className="collage-overlay" role="dialog" aria-modal="true" aria-label="Photo collage">
+    <div className="collage-overlay" aria-label="Photo collage">
       <header className="collage-header">
         <strong>{editing ? 'Edit collage' : 'Collage'}</strong>
         <div className="collage-header-actions">
