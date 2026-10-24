@@ -2,8 +2,8 @@ const MAX_PLAYERS = 6
 const MAX_MESSAGE_BYTES = 16_384
 const SESSION_SECONDS = 12 * 60 * 60
 const APP_ORIGIN = 'https://ilikejordan.com'
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024
-const MAX_IMAGES_PER_UPLOAD = 20
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_IMAGES_PER_UPLOAD = 5
 const GAMES_ALLOWED = new Set(['chess', 'catan', 'ticket-to-ride', 'custom'])
 const encoder = new TextEncoder()
 
@@ -53,7 +53,7 @@ export default {
       const session = await getActiveSession(request, env)
       if (!session) return new Response('Authentication required', { status: 401 })
       if (request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
-      if (Number(request.headers.get('Content-Length') || 0) > 84 * 1024 * 1024) return new Response('Upload too large', { status: 413 })
+      if (Number(request.headers.get('Content-Length') || 0) > 52 * 1024 * 1024) return new Response('Upload too large', { status: 413 })
       if (!request.headers.get('Content-Type')?.toLowerCase().startsWith('multipart/form-data')) return new Response('Multipart form data required', { status: 415 })
       return saveActivityImages(request, env, session)
     }
@@ -279,7 +279,7 @@ export class AuthState {
   async createImageActivities(request) {
     const data = await readJson(request)
     const subject = request.headers.get('x-ij-subject')
-    if (!subject || !Array.isArray(data?.items) || data.items.length < 1 || data.items.length > MAX_IMAGES_PER_UPLOAD) return jsonError('Choose between one and twenty images.', 400)
+    if (!subject || !Array.isArray(data?.items) || data.items.length < 1 || data.items.length > MAX_IMAGES_PER_UPLOAD) return jsonError('Each upload batch must contain between one and five images.', 400)
     const ids = data.items.map((item) => item?.id)
     if (ids.some((id) => typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id))) return jsonError('Invalid image metadata.', 400)
     const groupIds = new Set(data.items.map((item) => item.groupId).filter(Boolean))
@@ -531,7 +531,8 @@ async function saveActivityImages(request, env, session) {
   let captions = []
   try { captions = JSON.parse(String(form.get('captions') || '[]')) } catch { return jsonError('Invalid image captions.', 400) }
   if (!Array.isArray(captions) || captions.length !== files.length) return jsonError('Invalid image captions.', 400)
-  const groupId = grouped ? crypto.randomUUID() : null
+  const requestedGroupId = form.get('groupId')
+  const groupId = grouped ? (typeof requestedGroupId === 'string' && /^[a-f0-9-]{36}$/i.test(requestedGroupId) ? requestedGroupId : crypto.randomUUID()) : null
   const author = safeName(form.get('author'))
   const items = []
   try {

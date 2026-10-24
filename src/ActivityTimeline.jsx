@@ -3,6 +3,9 @@ import './ActivityTimeline.css'
 
 const SCALES = ['D', 'M', 'Y']
 const MAX_FILES = 20
+const MAX_UPLOAD_BATCH = 5
+const MAX_FILE_BYTES = 10 * 1024 * 1024
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 function localDateTime(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0')
@@ -32,11 +35,13 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
   const [captions, setCaptions] = useState([])
   const [individualDates, setIndividualDates] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [joinCode, setJoinCode] = useState('')
   const [touchStart, setTouchStart] = useState(null)
   const [profileMessage, setProfileMessage] = useState('')
   const fileInputRef = useRef(null)
   const previewsRef = useRef([])
+  const groupIdRef = useRef(null)
 
   useEffect(() => {
     let active = true
@@ -54,7 +59,8 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
   useEffect(() => () => previewsRef.current.forEach(URL.revokeObjectURL), [])
 
   const addFiles = (fileList) => {
-    const incoming = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'))
+    const incoming = Array.from(fileList || []).filter((file) => IMAGE_TYPES.includes(file.type) && file.size <= MAX_FILE_BYTES)
+    const rejectedCount = Array.from(fileList || []).length - incoming.length
     const next = [...selectedFiles, ...incoming].slice(0, MAX_FILES)
     const accepted = next.slice(selectedFiles.length)
     const nextPreviews = [...previews, ...accepted.map((file) => URL.createObjectURL(file))]
@@ -63,7 +69,8 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
     setPreviews(nextPreviews)
     setCaptions((values) => next.map((_, index) => values[index] || ''))
     setIndividualDates((values) => next.map((_, index) => values[index] || sharedDate))
-    if (incoming.length > next.length - selectedFiles.length) setMessage(`You can add up to ${MAX_FILES} images at a time.`)
+    if (rejectedCount) setMessage('Only JPEG, PNG, WebP, or GIF photos up to 10 MB each are supported.')
+    else if (incoming.length > next.length - selectedFiles.length) setMessage(`You can add up to ${MAX_FILES} images at a time.`)
   }
 
   const removeFile = (index) => {
@@ -80,28 +87,50 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
     event.preventDefault()
     if (!selectedFiles.length) return
     setUploading(true)
+    setUploadProgress(0)
     setMessage('')
+    const uploaded = []
+    const groupId = groupTogether ? (groupIdRef.current ||= crypto.randomUUID()) : null
     try {
-      const body = new FormData()
       const dates = selectedFiles.map((_, index) => new Date(groupTogether ? sharedDate : individualDates[index]).toISOString())
-      selectedFiles.forEach((file) => body.append('images', file, file.name))
-      body.append('author', name || 'A friend')
-      body.append('group', String(groupTogether))
-      body.append('dates', JSON.stringify(dates))
-      body.append('captions', JSON.stringify(captions))
-      const response = await fetch('/api/activity/images', { method: 'POST', credentials: 'same-origin', body })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Could not save images.')
-      setItems((current) => [...result, ...current].sort((left, right) => right.date.localeCompare(left.date)))
+      for (let start = 0; start < selectedFiles.length; start += MAX_UPLOAD_BATCH) {
+        const batchFiles = selectedFiles.slice(start, start + MAX_UPLOAD_BATCH)
+        const body = new FormData()
+        batchFiles.forEach((file) => body.append('images', file, file.name))
+        body.append('author', name || 'A friend')
+        body.append('group', String(groupTogether))
+        if (groupId) body.append('groupId', groupId)
+        body.append('dates', JSON.stringify(dates.slice(start, start + MAX_UPLOAD_BATCH)))
+        body.append('captions', JSON.stringify(captions.slice(start, start + MAX_UPLOAD_BATCH)))
+        const response = await fetch('/api/activity/images', { method: 'POST', credentials: 'same-origin', body })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'Could not save images.')
+        uploaded.push(...result)
+        setItems((current) => [...result, ...current].sort((left, right) => right.date.localeCompare(left.date)))
+        setUploadProgress(uploaded.length)
+      }
       setSelectedFiles([])
       previewsRef.current.forEach(URL.revokeObjectURL)
       previewsRef.current = []
       setPreviews([])
       setCaptions([])
       setIndividualDates([])
+      groupIdRef.current = null
       setComposerOpen(false)
     } catch (error) {
-      setMessage(error.message || 'Could not save images.')
+      if (uploaded.length) {
+        const remaining = selectedFiles.slice(uploaded.length)
+        previews.slice(0, uploaded.length).forEach(URL.revokeObjectURL)
+        const remainingPreviews = previews.slice(uploaded.length)
+        previewsRef.current = remainingPreviews
+        setSelectedFiles(remaining)
+        setPreviews(remainingPreviews)
+        setCaptions((current) => current.slice(uploaded.length))
+        setIndividualDates((current) => current.slice(uploaded.length))
+        setMessage(`${uploaded.length} photos saved. ${remaining.length} remain selected; save again to continue. ${error.message}`)
+      } else {
+        setMessage(error.message || 'Could not save images.')
+      }
     } finally {
       setUploading(false)
     }
@@ -202,10 +231,10 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
       </div>
       <footer className="archive-footer"><span>I LIKE JORDAN / OUR SHARED DAYS</span><span>{items.length} SAVED MOMENTS</span></footer>
 
-      {composerOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !uploading) setComposerOpen(false) }}><section className="activity-modal" role="dialog" aria-modal="true" aria-labelledby="memory-title"><div className="modal-heading"><div><p className="eyebrow">ADD TO THE ARCHIVE</p><h2 id="memory-title">A moment together</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setComposerOpen(false)}>×</button></div><form onSubmit={saveImages}><button type="button" className="drop-zone" onClick={() => fileInputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files) }}><span className="drop-icon">↑</span><strong>Choose photos</strong><small>Up to twenty JPEG, PNG, WebP, or GIF images</small><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = '' }} /></button>
+      {composerOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !uploading) setComposerOpen(false) }}><section className="activity-modal" role="dialog" aria-modal="true" aria-labelledby="memory-title"><div className="modal-heading"><div><p className="eyebrow">ADD TO THE ARCHIVE</p><h2 id="memory-title">A moment together</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setComposerOpen(false)}>×</button></div><form onSubmit={saveImages}><button type="button" className="drop-zone" onClick={() => fileInputRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files) }}><span className="drop-icon">↑</span><strong>Choose photos</strong><small>Up to twenty photos, 10 MB each</small><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = '' }} /></button>
             {selectedFiles.length > 0 && <div className="upload-settings"><label className="group-toggle"><input type="checkbox" checked={groupTogether} onChange={(event) => setGroupTogether(event.target.checked)} /><span className="toggle-track" /><span>Keep these photos together</span></label>{groupTogether && <label className="field-label" htmlFor="shared-date">DATE AND TIME</label>}{groupTogether && <input id="shared-date" className="date-input" type="datetime-local" value={sharedDate} onChange={(event) => setSharedDate(event.target.value)} />}</div>}
             <div className="upload-list">{selectedFiles.map((file, index) => <div className="upload-row" key={`${file.name}-${file.lastModified}-${index}`}><img src={previews[index]} alt="" /><div className="upload-fields"><strong>{file.name}</strong>{!groupTogether && <input aria-label={`Date and time for ${file.name}`} className="date-input" type="datetime-local" value={individualDates[index] || sharedDate} onChange={(event) => setIndividualDates((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} />}<input aria-label={`Caption for ${file.name}`} className="caption-input" maxLength={240} placeholder="Add a caption (optional)" value={captions[index] || ''} onChange={(event) => setCaptions((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} /></div><button type="button" className="remove-image" aria-label={`Remove ${file.name}`} onClick={() => removeFile(index)}>×</button></div>)}</div>
-            {message && <p className="notice" role="status">{message}</p>}<div className="modal-footer"><span>{selectedFiles.length} / {MAX_FILES} photos</span><button className="primary-button" disabled={!selectedFiles.length || uploading}>{uploading ? 'Saving…' : 'Save moment'} <span aria-hidden="true">↑</span></button></div></form></section></div>}
+            {message && <p className="notice" role="status">{message}</p>}<div className="modal-footer"><span>{uploading ? `Saving ${uploadProgress} / ${selectedFiles.length}…` : `${selectedFiles.length} / ${MAX_FILES} photos`}</span><button className="primary-button" disabled={!selectedFiles.length || uploading}>{uploading ? 'Saving…' : 'Save moment'} <span aria-hidden="true">↑</span></button></div></form></section></div>}
 
       {playOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlayOpen(false) }}><section className="activity-modal play-modal" role="dialog" aria-modal="true" aria-labelledby="play-title"><div className="modal-heading"><div><p className="eyebrow">PLAY TOGETHER</p><h2 id="play-title">Find a table</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setPlayOpen(false)}>×</button></div><p className="auth-copy">Start a new room or join with a six-letter code.</p><button className="primary-button" onClick={createGameLobby}>Create a lobby <span aria-hidden="true">↗</span></button><form className="play-join-form" onSubmit={joinGameLobby}><label className="field-label" htmlFor="activity-lobby-code">LOBBY CODE</label><div className="code-entry"><input id="activity-lobby-code" maxLength={6} autoCapitalize="characters" placeholder="ABCDEF" value={joinCode} onChange={(event) => setJoinCode(event.target.value.replace(/[^a-z]/gi, '').toUpperCase())} /><button className="join-button">Join <span aria-hidden="true">→</span></button></div></form></section></div>}
     </section>
