@@ -7,7 +7,7 @@ export function layoutOf(photo, index, groupSize) {
   const layout = photo.layout || {}
   return {
     order: layout.order ?? index,
-    span: layout.span ?? (groupSize > 1 ? 1 : 2),
+    cols: layout.cols ?? (layout.span === 1 ? 3 : layout.span === 2 ? 6 : groupSize > 1 ? 3 : 6),
     ratio: layout.ratio ?? 4 / 3,
     zoom: layout.zoom ?? 1,
     tx: layout.tx ?? 0,
@@ -89,7 +89,7 @@ function Tile({ photo, layout, editing, selected, gridVisible, activeCaption, on
     <figure
       ref={tileRef}
       className={`collage-tile${editing ? ' editing' : ''}${selected ? ' selected' : ''}${activeCaption ? ' active' : ''}`}
-      style={{ gridColumn: `span ${layout.span}`, aspectRatio: layout.ratio }}
+      style={{ gridColumn: `span ${layout.cols}`, aspectRatio: layout.ratio }}
       onClick={editing ? undefined : onToggle}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -107,6 +107,8 @@ function Collage({ photos, startEditing, onSave, onClose }) {
   const [editing, setEditing] = useState(startEditing)
   const [draft, setDraft] = useState(() => orderedPhotos(photos).map((photo, index, all) => ({ id: photo.id, caption: photo.caption || '', layout: layoutOf(photo, index, all.length) })))
   const [selectedId, setSelectedId] = useState(null)
+  const [author, setAuthor] = useState(photos[0]?.author || '')
+  const [postCaption, setPostCaption] = useState(photos[0]?.postCaption || '')
   const [activeId, setActiveId] = useState(null)
   const [gridVisible, setGridVisible] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -144,7 +146,7 @@ function Collage({ photos, startEditing, onSave, onClose }) {
     setSaving(true)
     setError('')
     try {
-      await onSave(draft.map((entry, order) => ({ id: entry.id, caption: entry.caption, layout: { ...entry.layout, order } })))
+      await onSave(draft.map((entry, order) => ({ id: entry.id, caption: entry.caption, author, postCaption, layout: { ...entry.layout, order } })))
       setSelectedId(null)
       setEditing(false)
     } catch (failure) {
@@ -159,6 +161,8 @@ function Collage({ photos, startEditing, onSave, onClose }) {
     setSelectedId(null)
     setEditing(false)
     setError('')
+    setAuthor(photos[0]?.author || '')
+    setPostCaption(photos[0]?.postCaption || '')
   }
 
   return (
@@ -179,6 +183,7 @@ function Collage({ photos, startEditing, onSave, onClose }) {
       </header>
 
       <div className="collage-scroll" onClick={(event) => { if (event.target === event.currentTarget) { setSelectedId(null); setActiveId(null) } }}>
+        {!editing && (photos[0]?.author || photos[0]?.postCaption) && <p className="collage-post"><strong>{photos[0].author}</strong>{photos[0].postCaption && <span>{photos[0].postCaption}</span>}</p>}
         <div className="collage-grid">
           {draft.map((entry) => (
             <Tile
@@ -188,7 +193,7 @@ function Collage({ photos, startEditing, onSave, onClose }) {
               editing={editing}
               selected={editing && selectedId === entry.id}
               gridVisible={gridVisible}
-              activeCaption={!editing && activeId === entry.id}
+              activeCaption={!editing && activeId === entry.id && Boolean(photoById.get(entry.id).caption)}
               onSelect={() => setSelectedId(entry.id)}
               onToggle={() => setActiveId((current) => current === entry.id ? null : entry.id)}
               onChange={(layout) => updateLayout(entry.id, layout)}
@@ -201,13 +206,18 @@ function Collage({ photos, startEditing, onSave, onClose }) {
       {editing && (
         <div className="collage-panel">
           {error && <p className="notice" role="status">{error}</p>}
-          {!selected ? <p className="collage-hint">Tap a photo to edit it. Drag to move, pinch or scroll to zoom.</p> : (
+          {!selected ? <>
+            <p className="collage-hint">Tap a photo to edit it. Drag to move, pinch or scroll to zoom.</p>
+            <input className="caption-input" maxLength={32} placeholder="Posted by" aria-label="Posted by" value={author} onChange={(event) => setAuthor(event.target.value)} />
+            <input className="caption-input" maxLength={240} placeholder="Post caption (optional)" aria-label="Post caption" value={postCaption} onChange={(event) => setPostCaption(event.target.value)} />
+          </> : (
             <>
               <div className="collage-row">
                 <span>Width</span>
                 <div className="segmented">
-                  <button className={selected.layout.span === 1 ? 'active' : ''} onClick={() => updateLayout(selected.id, { span: 1 })}>Half</button>
-                  <button className={selected.layout.span === 2 ? 'active' : ''} onClick={() => updateLayout(selected.id, { span: 2 })}>Full</button>
+                  <button className={selected.layout.cols === 2 ? 'active' : ''} onClick={() => updateLayout(selected.id, { cols: 2 })}>Third</button>
+                  <button className={selected.layout.cols === 3 ? 'active' : ''} onClick={() => updateLayout(selected.id, { cols: 3 })}>Half</button>
+                  <button className={selected.layout.cols === 6 ? 'active' : ''} onClick={() => updateLayout(selected.id, { cols: 6 })}>Full</button>
                 </div>
                 <button className="text-button" onClick={() => move(-1)} aria-label="Move earlier">↑ Earlier</button>
                 <button className="text-button" onClick={() => move(1)} aria-label="Move later">↓ Later</button>

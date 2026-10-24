@@ -329,6 +329,8 @@ export class AuthState {
       if (!record || record.kind !== 'image') return jsonError('Photo not found.', 404)
       if (entry.layout !== undefined) record.layout = cleanLayout(entry.layout)
       if (typeof entry.caption === 'string') record.caption = entry.caption.trim().slice(0, 240)
+      if (typeof entry.author === 'string') record.author = safeName(entry.author)
+      if (typeof entry.postCaption === 'string') record.postCaption = entry.postCaption.trim().slice(0, 240)
       updated.push(record)
     }
     await Promise.all(updated.map((record) => this.state.storage.put(`activity:${record.id}`, record)))
@@ -618,7 +620,7 @@ function cleanLayout(layout) {
   const limit = (zoom - 1) / 2
   return {
     order: Math.round(number(layout?.order, 0, 999, 0)),
-    span: layout?.span === 2 ? 2 : 1,
+    cols: [2, 3, 6].includes(layout?.cols) ? layout.cols : 3,
     ratio: number(layout?.ratio, 0.4, 2.5, 4 / 3),
     zoom,
     tx: number(layout?.tx, -limit, limit, 0),
