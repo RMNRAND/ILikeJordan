@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
-const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || 'https://tabletalk-signaling.k2tfbvzgpm.workers.dev'
+const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || window.location.origin
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
 const GAMES = [
   { id: 'chess', name: 'Chess', detail: 'Classic strategy' },
@@ -13,6 +13,12 @@ const makeId = () => crypto.randomUUID()
 const makeCode = () => Array.from({ length: 6 }, () => String.fromCharCode(65 + Math.random() * 26)).join('')
 
 function App() {
+  const [authState, setAuthState] = useState('checking')
+  const [authAddress, setAuthAddress] = useState('')
+  const [authCode, setAuthCode] = useState('')
+  const [authStage, setAuthStage] = useState('address')
+  const [authMessage, setAuthMessage] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
   const [name, setName] = useState(() => localStorage.getItem('player-name') || '')
   const [codeInput, setCodeInput] = useState('')
   const [roomCode, setRoomCode] = useState('')
@@ -34,6 +40,16 @@ function App() {
   const peerIdRef = useRef('')
   const hostIdRef = useRef('')
   const eventsRef = useRef([])
+
+  useEffect(() => {
+    fetch('/api/auth/status', { credentials: 'same-origin' })
+      .then((response) => response.json())
+      .then((result) => setAuthState(result.authorized ? 'authorized' : 'signed-out'))
+      .catch(() => {
+        setAuthState('signed-out')
+        setAuthMessage('Sign-in service is unavailable right now.')
+      })
+  }, [])
 
   useEffect(() => {
     peerIdRef.current = peerId
@@ -304,6 +320,64 @@ function App() {
     setNotice('Lobby code copied.')
   }
 
+  const requestAuthCode = async (event) => {
+    event.preventDefault()
+    setAuthBusy(true)
+    setAuthMessage('')
+    try {
+      const response = await fetch('/api/auth/request', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: authAddress }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not request a code.')
+      setAuthStage('code')
+      setAuthMessage('If this address is authorized, a code will arrive shortly.')
+    } catch (error) {
+      setAuthMessage(error.message)
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const verifyAuthCode = async (event) => {
+    event.preventDefault()
+    setAuthBusy(true)
+    setAuthMessage('')
+    try {
+      const response = await fetch('/api/auth/verify', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: authAddress, code: authCode }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not verify the code.')
+      setAuthState('authorized')
+      setNotice('')
+    } catch (error) {
+      setAuthMessage(error.message)
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+    socketRef.current?.close()
+    closeConnections()
+    setRoomCode('')
+    setGameStarted(false)
+    setPlayers([])
+    setConnectedPeers([])
+    setHostId('')
+    setAuthState('signed-out')
+    setAuthStage('address')
+    setAuthCode('')
+  }
+
   const isHost = peerId === hostId
   const hasTurnPath = isHost ? connectedPeers.length > 0 : connectedPeers.includes(hostId)
 
@@ -311,10 +385,20 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <a className="wordmark" href="#home" aria-label="I Like Jordan home"><span className="mark">J</span> I LIKE JORDAN</a>
-        <div className="top-status"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'PEER LINK ACTIVE' : 'PRIVATE TABLES'}</div>
+        <div className="topbar-actions">{authState === 'authorized' && <button className="logout-button" onClick={logout}>Sign out</button>}<div className="top-status"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'PEER LINK ACTIVE' : 'PRIVATE TABLES'}</div></div>
       </header>
 
-      {!roomCode ? (
+      {authState !== 'authorized' ? (
+        <section className="auth-page">
+          <div className="auth-intro"><p className="eyebrow">PRIVATE ACCESS</p><h1>Good games<br /><em>start here.</em></h1><p className="intro-copy">This table is invitation-only. Verify your approved phone gateway address to continue.</p></div>
+          <section className="entry-panel auth-panel" aria-label="Sign in">
+            <div className="panel-heading"><div><p className="eyebrow">I LIKE JORDAN</p><h2>{authState === 'checking' ? 'Checking access' : authStage === 'address' ? 'Verify your access' : 'Enter your code'}</h2></div><span className="panel-index">PRIVATE</span></div>
+            {authState === 'checking' ? <p className="auth-copy">Checking your sign-in…</p> : authStage === 'address' ? <form onSubmit={requestAuthCode}><label className="field-label" htmlFor="auth-address">AUTHORIZED PHONE GATEWAY EMAIL</label><input id="auth-address" type="email" autoComplete="email" required maxLength={254} placeholder="number@carrier-gateway.example" value={authAddress} onChange={(event) => setAuthAddress(event.target.value)} /><button className="primary-button" disabled={authBusy}>{authBusy ? 'Sending code…' : 'Send sign-in code'} <span aria-hidden="true">→</span></button></form> : <form onSubmit={verifyAuthCode}><p className="auth-copy">Enter the six-digit code sent to <strong>{authAddress}</strong>.</p><label className="field-label" htmlFor="auth-code">VERIFICATION CODE</label><input id="auth-code" inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6} placeholder="000000" value={authCode} onChange={(event) => setAuthCode(event.target.value.replace(/\D/g, '').slice(0, 6))} /><button className="primary-button" disabled={authBusy || authCode.length !== 6}>{authBusy ? 'Checking…' : 'Verify and continue'} <span aria-hidden="true">→</span></button><button type="button" className="text-button auth-back" onClick={() => { setAuthStage('address'); setAuthCode(''); setAuthMessage('') }}>Use a different address</button></form>}
+            {authMessage && <p className="notice" role="status">{authMessage}</p>}
+            <p className="panel-foot">Three incorrect codes lock access until reset by the administrator.</p>
+          </section>
+        </section>
+      ) : !roomCode ? (
         <section className="lobby-home" id="home">
           <div className="intro">
             <p className="eyebrow">A TABLE FOR YOUR PEOPLE</p>

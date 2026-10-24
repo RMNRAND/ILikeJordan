@@ -1,14 +1,32 @@
 name = "tabletalk-signaling"
 main = "worker/index.js"
 compatibility_date = "2026-10-22"
-workers_dev = true
+workers_dev = false
+
+[assets]
+directory = "./dist/"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/room/*", "/health"]
 
 [vars]
-ALLOWED_ORIGIN = "https://rmnrand.github.io"
+ALLOWED_ORIGIN = "https://ilikejordan.com"
+RESEND_FROM_EMAIL = "I Like Jordan <login@ilikejordan.com>"
 
 [durable_objects]
-bindings = [{ name = "ROOMS", class_name = "LobbyRoom" }]
+bindings = [
+	{ name = "ROOMS", class_name = "LobbyRoom" },
+	{ name = "AUTH", class_name = "AuthState" }
+]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["LobbyRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["AuthState"]
+
+[[routes]]
+pattern = "ilikejordan.com/*"
+zone_name = "ilikejordan.com"
