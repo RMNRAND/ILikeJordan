@@ -26,6 +26,14 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [name, setName] = useState(() => localStorage.getItem('player-name') || '')
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem('theme')
+    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    localStorage.setItem('theme', dark ? 'dark' : 'light')
+  }, [dark])
   const [roomCode, setRoomCode] = useState('')
   const [selectedGame, setSelectedGame] = useState('chess')
   const [gameStarted, setGameStarted] = useState(false)
@@ -425,7 +433,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <a className="wordmark" href="#home" aria-label="I Like Jordan home"><span className="mark">J</span> I LIKE JORDAN</a>
-        <div className="topbar-actions">{authState === 'authorized' && <button className="logout-button" onClick={logout}>Sign out</button>}{linkState === 'connected' && <div className="top-status"><span className={`status-dot ${linkState}`} />PEER LINK ACTIVE</div>}</div>
+        <div className="topbar-actions"><button className="theme-switch" role="switch" aria-checked={dark} aria-label="Dark mode" title="Dark mode" onClick={() => setDark((value) => !value)}><span className="theme-knob" /></button>{authState === 'authorized' && <button className="logout-button" onClick={logout}>Sign out</button>}{linkState === 'connected' && <div className="top-status"><span className={`status-dot ${linkState}`} />PEER LINK ACTIVE</div>}</div>
       </header>
 
       {authState !== 'authorized' ? (

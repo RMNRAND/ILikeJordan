@@ -161,4 +161,7 @@ h1, h2, p { margin-top: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-}
+}.theme-switch { position: relative; width: 34px; height: 18px; flex: 0 0 34px; padding: 0; background: #d1d1c8; border: 0; border-radius: 12px; cursor: pointer; transition: background .18s ease; }
+.theme-knob { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; background: #fff; border-radius: 50%; transition: transform .18s ease; }
+.theme-switch[aria-checked='true'] { background: var(--green); }
+.theme-switch[aria-checked='true'] .theme-knob { transform: translateX(16px); }
