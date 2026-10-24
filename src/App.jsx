@@ -425,7 +425,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <a className="wordmark" href="#home" aria-label="I Like Jordan home"><span className="mark">J</span> I LIKE JORDAN</a>
-        <div className="topbar-actions">{authState === 'authorized' && <button className="logout-button" onClick={logout}>Sign out</button>}<div className="top-status"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'PEER LINK ACTIVE' : 'PRIVATE TABLES'}</div></div>
+        <div className="topbar-actions">{authState === 'authorized' && <button className="logout-button" onClick={logout}>Sign out</button>}{linkState === 'connected' && <div className="top-status"><span className={`status-dot ${linkState}`} />PEER LINK ACTIVE</div>}</div>
       </header>
 
       {authState !== 'authorized' ? (

@@ -106,7 +106,7 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
         const batchFiles = selectedFiles.slice(start, start + MAX_UPLOAD_BATCH)
         const body = new FormData()
         batchFiles.forEach((file) => body.append('images', file, file.name))
-        body.append('author', name || 'A friend')
+        body.append('author', name || 'Roman & Jordan')
         body.append('group', String(groupTogether))
         if (groupId) body.append('groupId', groupId)
         body.append('dates', JSON.stringify(dates.slice(start, start + MAX_UPLOAD_BATCH)))
@@ -213,7 +213,6 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
     <section className="activity-home">
       <div className="activity-heading">
         <div className="activity-heading-copy">
-          <p className="eyebrow">SHARED ACTIVITY</p>
           <h1>Our <em>Timeline</em></h1>
           <p className="activity-subtitle">Photos and times together.</p>
           <label className="profile-name"><span>POSTING AS</span><input autoComplete="nickname" maxLength={24} placeholder="Your name" value={name} onChange={(event) => onNameChange(event.target.value)} /></label>

@@ -629,8 +629,8 @@ function cleanLayout(layout) {
 }
 
 function safeName(value) {
-  if (typeof value !== 'string') return 'A friend'
-  return value.trim().replace(/[<>\r\n]/g, '').slice(0, 32) || 'A friend'
+  if (typeof value !== 'string') return 'Roman & Jordan'
+  return value.trim().replace(/[<>\r\n]/g, '').slice(0, 32) || 'Roman & Jordan'
 }
 
 async function makeSessionToken(subject, env) {
