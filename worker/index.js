@@ -49,6 +49,18 @@ export default {
       }))
     }
 
+    if (url.pathname === '/api/activity/layout' && request.method === 'PATCH') {
+      const session = await getActiveSession(request, env)
+      if (!session) return new Response('Authentication required', { status: 401 })
+      if (request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
+      if (Number(request.headers.get('Content-Length') || 0) > 32_768) return new Response('Request too large', { status: 413 })
+      const headers = new Headers(request.headers)
+      headers.set('x-ij-subject', session.sub)
+      const internalUrl = new URL(request.url)
+      internalUrl.pathname = '/activity/layout'
+      return env.AUTH.get(env.AUTH.idFromName('auth-state')).fetch(new Request(internalUrl, { method: 'PATCH', headers, body: request.body }))
+    }
+
     if (url.pathname === '/api/activity/images' && request.method === 'POST') {
       const session = await getActiveSession(request, env)
       if (!session) return new Response('Authentication required', { status: 401 })
@@ -132,6 +144,7 @@ export class AuthState {
     }
     if (path === '/activity' && request.method === 'POST') return this.createActivity(request)
     if (path === '/activity/images' && request.method === 'POST') return this.createImageActivities(request)
+    if (path === '/activity/layout' && request.method === 'PATCH') return this.updateImageLayouts(request)
     if (path === '/activity/images/reserve' && request.method === 'POST') {
       const subject = request.headers.get('x-ij-subject')
       const data = await readJson(request)
@@ -302,6 +315,24 @@ export class AuthState {
     if (records.some((item) => !item)) return jsonError('Invalid image metadata.', 400)
     await Promise.all(records.map((item) => this.state.storage.put(`activity:${item.id}`, item)))
     return Response.json(records, { status: 201 })
+  }
+
+  async updateImageLayouts(request) {
+    const data = await readJson(request)
+    const subject = request.headers.get('x-ij-subject')
+    if (!subject || !Array.isArray(data?.items) || data.items.length < 1 || data.items.length > 20) return jsonError('Invalid layout update.', 400)
+    if (!await this.consumeSubjectBudget(`activity-layout:${subject}`, 300, 24 * 60 * 60 * 1000)) return jsonError('Daily layout edit limit reached.', 429)
+    const updated = []
+    for (const entry of data.items) {
+      if (typeof entry?.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(entry.id)) return jsonError('Invalid layout update.', 400)
+      const record = await this.state.storage.get(`activity:${entry.id}`)
+      if (!record || record.kind !== 'image') return jsonError('Photo not found.', 404)
+      if (entry.layout !== undefined) record.layout = cleanLayout(entry.layout)
+      if (typeof entry.caption === 'string') record.caption = entry.caption.trim().slice(0, 240)
+      updated.push(record)
+    }
+    await Promise.all(updated.map((record) => this.state.storage.put(`activity:${record.id}`, record)))
+    return Response.json(updated)
   }
 
   async consumeSubjectBudget(key, limit, windowMs, amount = 1) {
@@ -579,6 +610,20 @@ function validActivityDate(value) {
   const milliseconds = Date.parse(value)
   if (!Number.isFinite(milliseconds) || milliseconds < Date.UTC(2000, 0, 1) || milliseconds > Date.now() + 366 * 24 * 60 * 60 * 1000) return ''
   return new Date(milliseconds).toISOString()
+}
+
+function cleanLayout(layout) {
+  const number = (value, min, max, fallback) => Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+  const zoom = number(layout?.zoom, 1, 4, 1)
+  const limit = (zoom - 1) / 2
+  return {
+    order: Math.round(number(layout?.order, 0, 999, 0)),
+    span: layout?.span === 2 ? 2 : 1,
+    ratio: number(layout?.ratio, 0.4, 2.5, 4 / 3),
+    zoom,
+    tx: number(layout?.tx, -limit, limit, 0),
+    ty: number(layout?.ty, -limit, limit, 0),
+  }
 }
 
 function safeName(value) {
