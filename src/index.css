@@ -11,8 +11,8 @@
   --muted: #77786f;
   --line: #deddd5;
   --paper: #fbfaf7;
-  --green: #35694f;
-  --green-dark: #244a38;
+  --green: #5b6874;
+  --green-dark: #46525c;
   --mono: 'DM Mono', monospace;
   --serif: 'Playfair Display', Georgia, serif;
   font-optical-sizing: auto;
@@ -23,4 +23,4 @@ body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid #bc693c; outline-offset: 3px; }
-::selection { color: #fff; background: #35694f; }
+::selection { color: #fff; background: #5b6874; }
