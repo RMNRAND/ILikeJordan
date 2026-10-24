@@ -117,6 +117,12 @@ function Collage({ photos, startEditing, onSave, onClose }) {
 
   useEffect(() => () => clearTimeout(hideTimer.current), [])
   useEffect(() => {
+    const previous = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => { document.documentElement.style.overflow = previous; document.body.style.overflow = '' }
+  }, [])
+  useEffect(() => {
     const onKey = (event) => { if (event.key === 'Escape' && !saving) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
