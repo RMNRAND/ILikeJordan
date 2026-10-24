@@ -28,5 +28,5 @@ tag = "v2"
 new_sqlite_classes = ["AuthState"]
 
 [[routes]]
-pattern = "ilikejordan.com/*"
-zone_name = "ilikejordan.com"
+pattern = "ilikejordan.com"
+custom_domain = true
