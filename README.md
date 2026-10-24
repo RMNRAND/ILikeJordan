@@ -4,7 +4,7 @@ An invitation-only React lobby. Static files are served by Cloudflare Worker Ass
 
 ## Authentication
 
-Sign-in emails a one-time code through Resend to an approved carrier email-to-SMS gateway address. Carrier gateways are not a reliable or universal SMS service; delivery depends on the carrier and must be verified with each recipient.
+Sign-in emails a one-time code through Resend to an approved regular email address.
 
 Before enabling the Worker:
 
@@ -19,9 +19,9 @@ npx wrangler secret put AUTH_PEPPER
 npx wrangler secret put AUTH_ADMIN_KEY
 ```
 
-`RESEND_FROM_EMAIL` is configured in `wrangler.toml` as `I Like Jordan <login@ilikejordan.com>`. `ALLOWED_GATEWAY_EMAILS` is a JSON array of complete, lower-case gateway addresses, for example `["15551234567@vtext.com"]` (replace it with the actual approved gateway addresses). Generate independent random values for `AUTH_PEPPER` and `AUTH_ADMIN_KEY`; do not reuse the Resend key.
+`RESEND_FROM_EMAIL` is configured in `wrangler.toml` as `I Like Jordan <login@ilikejordan.com>`. For compatibility, the secret is still named `ALLOWED_GATEWAY_EMAILS`, but its value should now be a JSON array of approved regular email addresses, for example `["player@example.com","friend@example.net"]`. Replace the list by running `npx wrangler secret put ALLOWED_GATEWAY_EMAILS` and entering the JSON array at the prompt. Generate independent random values for `AUTH_PEPPER` and `AUTH_ADMIN_KEY`; do not reuse the Resend key.
 
-The Worker stores only keyed hashes of gateway addresses and verification codes. Codes expire after five minutes. Three incorrect codes permanently lock that address until manually reset. Delivery is limited to three codes/hour per address with a 60-second cooldown; IP limits also apply.
+The Worker stores only keyed hashes of approved email addresses and verification codes. Codes expire after five minutes. Three incorrect codes permanently lock that address until manually reset. Delivery is limited to three codes/hour per address with a 60-second cooldown; IP limits also apply.
 
 To manually unlock an address after configuring the `AUTH_ADMIN_KEY` secret, send the request from a trusted shell. Keep the key in a local shell variable; do not commit it:
 
@@ -30,7 +30,7 @@ curl -X POST https://ilikejordan.com/api/admin/unlock \
   -H "Origin: https://ilikejordan.com" \
   -H "Authorization: Bearer $AUTH_ADMIN_KEY" \
   -H "Content-Type: application/json" \
-  --data '{"address":"15551234567@vtext.com"}'
+  --data '{"address":"player@example.com"}'
 ```
 
 ## Deploy

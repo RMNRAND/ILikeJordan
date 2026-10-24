@@ -83,7 +83,7 @@ export class AuthState {
     if (!await this.consumeIpBudget(request, 'request', 10, 24 * 60 * 60 * 1000)) return jsonError('Too many code requests. Try again tomorrow.', 429)
     const data = await readJson(request)
     const address = normalizeAddress(data?.address)
-    if (!address) return jsonError('Enter the phone gateway email address.', 400)
+    if (!address) return jsonError('Enter a valid email address.', 400)
     const addressKey = await this.key('address', address)
     const lock = await this.state.storage.get(`lock:${addressKey}`)
     if (lock?.locked) return Response.json({ ok: true })
@@ -121,7 +121,7 @@ export class AuthState {
           text: `Your I Like Jordan verification code is ${code}. It expires in 5 minutes. If you did not request this, ignore this message.`,
         }),
       })
-      if (!result.ok) return jsonError('Could not deliver a code. Check the approved phone gateway address.', 502)
+      if (!result.ok) return jsonError('Could not deliver a code. Check the approved email address.', 502)
     } catch {
       return jsonError('Could not deliver a code right now.', 502)
     }
