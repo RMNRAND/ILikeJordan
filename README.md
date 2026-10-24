@@ -1,4 +1,4 @@
-# Tabletalk
+# I Like Jordan
 
 A static React lobby for turn-based board games. GitHub Pages serves the app. A Cloudflare Worker assigns six-letter lobby codes, tracks players, and exchanges WebRTC connection setup messages. Turn text is sent over direct WebRTC data channels; the Worker does not relay turns.
 

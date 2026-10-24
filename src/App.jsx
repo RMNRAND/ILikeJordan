@@ -310,7 +310,7 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="#home" aria-label="Tabletalk home"><span className="mark">T</span> TABLETALK</a>
+        <a className="wordmark" href="#home" aria-label="I Like Jordan home"><span className="mark">J</span> I LIKE JORDAN</a>
         <div className="top-status"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'PEER LINK ACTIVE' : 'PRIVATE TABLES'}</div>
       </header>
 
@@ -335,7 +335,7 @@ function App() {
             {notice && <p className="notice" role="status">{notice}</p>}
             <p className="panel-foot">No account needed <span>·</span> Up to six players</p>
           </section>
-          <div className="home-footer"><span>TABLETALK / 001</span><span>THE GAME STAYS WITH YOU</span><span>SCROLL NOT REQUIRED</span></div>
+          <div className="home-footer"><span>I LIKE JORDAN / 001</span><span>THE GAME STAYS WITH YOU</span><span>SCROLL NOT REQUIRED</span></div>
         </section>
       ) : !gameStarted ? (
         <section className="room-view">
