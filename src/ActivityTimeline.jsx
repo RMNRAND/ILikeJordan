@@ -168,11 +168,11 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
           <p className="eyebrow">SHARED ACTIVITY</p>
           <h1>Our <em>Timeline</em></h1>
           <p className="activity-subtitle">Photos and times together.</p>
+          <label className="profile-name"><span>POSTING AS</span><input autoComplete="nickname" maxLength={24} placeholder="Your name" value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
         </div>
         <div className="activity-actions">
-          <label className="profile-name"><span>YOUR NAME</span><input autoComplete="nickname" maxLength={24} placeholder="Your name" value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
           <button className="icon-action plus-action" aria-label="Add photos" title="Add photos" onClick={() => { setMessage(''); setComposerOpen(true) }}>+</button>
-          <button className="primary-button play-action" onClick={() => setPlayOpen(true)}>Play together <span aria-hidden="true">↗</span></button>
+          <button className="icon-action game-action" aria-label="Start or join a game" title="Start or join a game" onClick={() => setPlayOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h7A2.5 2.5 0 0 1 17 7.5V9l3.1-2.07A1.25 1.25 0 0 1 22 7.97v8.06a1.25 1.25 0 0 1-1.9 1.04L17 15v1.5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 5 16.5z" /></svg></button>
         </div>
       </div>
       {profileMessage && <p className="activity-message" role="status">{profileMessage}</p>}
