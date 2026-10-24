@@ -164,15 +164,15 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
   return (
     <section className="activity-home">
       <div className="activity-heading">
-        <div>
+        <div className="activity-heading-copy">
           <p className="eyebrow">SHARED ACTIVITY</p>
           <h1>Our <em>Timeline</em></h1>
           <p className="activity-subtitle">Photos and times together.</p>
-          <div className="activity-actions">
-            <button className="icon-action plus-action" aria-label="Add photos" title="Add photos" onClick={() => { setMessage(''); setComposerOpen(true) }}>+</button>
-            <button className="icon-action game-action" aria-label="Start or join a game" title="Start or join a game" onClick={() => setPlayOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.75c0-.77.84-1.25 1.5-.86l9.5 5.5a1 1 0 0 1 0 1.72l-9.5 5.5c-.66.39-1.5-.09-1.5-.86z" /></svg></button>
-          </div>
           <label className="profile-name"><span>POSTING AS</span><input autoComplete="nickname" maxLength={24} placeholder="Your name" value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
+        </div>
+        <div className="activity-actions">
+          <button className="icon-action plus-action" aria-label="Add photos" title="Add photos" onClick={() => { setMessage(''); setComposerOpen(true) }}>+</button>
+          <button className="icon-action game-action" aria-label="Start or join a game" title="Start or join a game" onClick={() => setPlayOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.75c0-.77.84-1.25 1.5-.86l9.5 5.5a1 1 0 0 1 0 1.72l-9.5 5.5c-.66.39-1.5-.09-1.5-.86z" /></svg></button>
         </div>
       </div>
       {profileMessage && <p className="activity-message" role="status">{profileMessage}</p>}
