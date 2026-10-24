@@ -94,15 +94,14 @@
 
 @media (max-width: 760px) {
   .activity-heading { align-items: flex-start; flex-direction: column; }
-  .activity-actions { position: absolute; top: 42px; right: 0; }
-  .activity-heading { position: relative; padding-right: 110px; }
+  .activity-actions { position: static; width: 100%; justify-content: flex-end; padding-top: 8px; }
   .memory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
   .activity-home { min-height: calc(100svh - 65px); padding-top: 35px; }
-  .activity-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding-right: 0; }
+  .activity-heading { display: flex; align-items: flex-start; flex-direction: column; gap: 12px; }
   .activity-heading h1 { font-size: 43px; }
-  .activity-actions { position: static; width: auto; justify-content: flex-end; gap: 7px; padding-top: 28px; }
+  .activity-actions { position: static; width: 100%; justify-content: flex-end; gap: 7px; padding-top: 0; }
   .activity-actions .icon-action { width: 37px; height: 37px; flex-basis: 37px; }
   .profile-name { margin-top: 10px; }
   .timeline-toolbar { align-items: flex-start; flex-direction: column; gap: 14px; padding: 19px 0 22px; }
