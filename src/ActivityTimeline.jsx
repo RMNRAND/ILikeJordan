@@ -166,8 +166,8 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
       <div className="activity-heading">
         <div>
           <p className="eyebrow">SHARED ACTIVITY</p>
-          <h1>Activity</h1>
-          <p className="activity-subtitle">Photos and completed games.</p>
+          <h1>Our <em>Timeline</em></h1>
+          <p className="activity-subtitle">Photos and times together.</p>
         </div>
         <div className="activity-actions">
           <label className="profile-name"><span>YOUR NAME</span><input autoComplete="nickname" maxLength={24} placeholder="Your name" value={name} onChange={(event) => onNameChange(event.target.value)} /></label>
