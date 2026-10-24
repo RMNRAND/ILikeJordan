@@ -3,16 +3,6 @@ name: Deploy I Like Jordan
 on:
   push:
     branches: [main]
-    paths:
-      - worker/**
-      - src/**
-      - public/**
-      - index.html
-      - vite.config.js
-      - wrangler.toml
-      - package.json
-      - package-lock.json
-      - .github/workflows/worker.yml
   workflow_dispatch:
 
 jobs:
@@ -26,14 +16,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Deploy Worker when credentials are configured
-        shell: bash
+      - name: Check Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
-            echo "::notice::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to enable automatic deployments."
-            exit 0
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "::error::Add CLOUDFLARE_API_TOKEN under repository Settings > Secrets and variables > Actions."
+            exit 1
           fi
-          npx wrangler deploy
+      - name: Deploy Worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

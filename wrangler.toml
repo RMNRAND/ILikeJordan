@@ -1,5 +1,6 @@
 name = "tabletalk-signaling"
 main = "worker/index.js"
+account_id = "7a76ffb20b3b5ce6e82477910c195a85"
 compatibility_date = "2026-10-22"
 workers_dev = false
 

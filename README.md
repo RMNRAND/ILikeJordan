@@ -37,7 +37,7 @@ curl -X POST https://ilikejordan.com/api/admin/unlock \
 
 Run `npm ci`, `npm run build`, then `npx wrangler deploy` after setting the Worker secrets. The GitHub Pages publish workflow is removed because static Pages cannot enforce this Worker gate. Disable the existing Pages site after the Worker is live on `ilikejordan.com` so the old Pages URL is not an alternate public app.
 
-For automatic Worker deployments, add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Actions repository secrets. The token needs permission to edit Workers and read the account. Without those CI secrets, the workflow safely skips deployment.
+The `Deploy I Like Jordan` workflow builds and deploys on every push to `main`. To enable it, add one GitHub Actions repository secret named `CLOUDFLARE_API_TOKEN` under **Settings → Secrets and variables → Actions**. Create a scoped Cloudflare token with permission to edit Workers Scripts and the account resources needed by this Worker (Durable Objects and R2); do not paste the token into chat or commit it. The account ID is already configured in `wrangler.toml`. Until `CLOUDFLARE_API_TOKEN` is added, pushes will build but the deploy job will fail with a setup message rather than silently skipping.
 
 ## Limits and privacy
 
