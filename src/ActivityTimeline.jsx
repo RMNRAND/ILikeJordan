@@ -172,7 +172,7 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
         </div>
         <div className="activity-actions">
           <button className="icon-action plus-action" aria-label="Add photos" title="Add photos" onClick={() => { setMessage(''); setComposerOpen(true) }}>+</button>
-          <button className="icon-action game-action" aria-label="Start or join a game" title="Start or join a game" onClick={() => setPlayOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h7A2.5 2.5 0 0 1 17 7.5V9l3.1-2.07A1.25 1.25 0 0 1 22 7.97v8.06a1.25 1.25 0 0 1-1.9 1.04L17 15v1.5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 5 16.5z" /></svg></button>
+          <button className="icon-action game-action" aria-label="Start or join a game" title="Start or join a game" onClick={() => setPlayOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.75c0-.77.84-1.25 1.5-.86l9.5 5.5a1 1 0 0 1 0 1.72l-9.5 5.5c-.66.39-1.5-.09-1.5-.86z" /></svg></button>
         </div>
       </div>
       {profileMessage && <p className="activity-message" role="status">{profileMessage}</p>}
