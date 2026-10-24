@@ -2,12 +2,16 @@ const MAX_PLAYERS = 6
 const MAX_MESSAGE_BYTES = 16_384
 const SESSION_SECONDS = 12 * 60 * 60
 const APP_ORIGIN = 'https://ilikejordan.com'
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024
+const MAX_IMAGES_PER_UPLOAD = 5
+const GAMES_ALLOWED = new Set(['chess', 'catan', 'ticket-to-ride', 'custom'])
 const encoder = new TextEncoder()
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
-    if (url.protocol !== 'https:') return new Response('Not found', { status: 404 })
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(url.hostname)
+    if (url.protocol !== 'https:' && !isLocalhost) return new Response('Not found', { status: 404 })
     if (url.pathname === '/health') return Response.json({ ok: true, service: 'i-like-jordan' })
 
     if (url.pathname.startsWith('/api/auth/')) {
@@ -25,6 +29,49 @@ export default {
       if (!env.AUTH_ADMIN_KEY || request.headers.get('Authorization') !== `Bearer ${env.AUTH_ADMIN_KEY}`) return new Response('Forbidden', { status: 403 })
       const id = env.AUTH.idFromName('auth-state')
       return env.AUTH.get(id).fetch(new Request(request))
+    }
+
+    if (url.pathname === '/api/activity') {
+      if (!['GET', 'POST'].includes(request.method)) return new Response('Method not allowed', { status: 405 })
+      const session = await getActiveSession(request, env)
+      if (!session) return new Response('Authentication required', { status: 401 })
+      if (request.method === 'POST' && request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
+      if (Number(request.headers.get('Content-Length') || 0) > 32_768) return new Response('Request too large', { status: 413 })
+      const id = env.AUTH.idFromName('auth-state')
+      const headers = new Headers(request.headers)
+      headers.set('x-ij-subject', session.sub)
+      const internalUrl = new URL(request.url)
+      internalUrl.pathname = '/activity'
+      return env.AUTH.get(id).fetch(new Request(internalUrl, {
+        method: request.method,
+        headers,
+        body: request.method === 'GET' ? undefined : request.body,
+      }))
+    }
+
+    if (url.pathname === '/api/activity/images' && request.method === 'POST') {
+      const session = await getActiveSession(request, env)
+      if (!session) return new Response('Authentication required', { status: 401 })
+      if (request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
+      if (Number(request.headers.get('Content-Length') || 0) > 22 * 1024 * 1024) return new Response('Upload too large', { status: 413 })
+      if (!request.headers.get('Content-Type')?.toLowerCase().startsWith('multipart/form-data')) return new Response('Multipart form data required', { status: 415 })
+      return saveActivityImages(request, env, session)
+    }
+
+    const imageMatch = url.pathname.match(/^\/api\/activity\/images\/([a-f0-9-]{36})$/i)
+    if (imageMatch && request.method === 'GET') {
+      const session = await getActiveSession(request, env)
+      if (!session) return new Response('Authentication required', { status: 401 })
+      const budget = await requestActivityReadBudget(env, session.sub, 'image')
+      if (!budget.ok) return budget
+      const image = await env.ACTIVITY_MEDIA.get(`activity/${imageMatch[1]}`)
+      if (!image) return new Response('Not found', { status: 404 })
+      return new Response(image.body, { headers: {
+        'Content-Type': image.httpMetadata?.contentType || 'application/octet-stream',
+        'Cache-Control': 'private, max-age=300',
+        'X-Content-Type-Options': 'nosniff',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+      } })
     }
 
     const roomMatch = url.pathname.match(/^\/room\/([A-Z]{6})$/)
@@ -54,18 +101,44 @@ export class AuthState {
   }
 
   async fetch(request) {
-    const path = new URL(request.url).pathname
-    if (path === '/api/auth/status' && request.method === 'GET') {
+    const rawPath = new URL(request.url).pathname
+    const path = rawPath.replace(/^\/api(?=\/auth\/)/, '')
+    if (path === '/auth/status' && request.method === 'GET') {
       if (!this.env.AUTH_PEPPER) return Response.json({ authorized: false })
       if (!await this.consumeIpBudget(request, 'status', 120, 60_000)) return jsonError('Too many access checks. Try again shortly.', 429)
       const session = await verifySession(request, this.env)
       const lock = session ? await this.state.storage.get(`lock:${session.sub}`) : null
       return Response.json({ authorized: Boolean(session && !lock?.locked) })
     }
-    if (path === '/api/auth/request' && request.method === 'POST') return this.requestCode(request)
-    if (path === '/api/auth/verify' && request.method === 'POST') return this.verifyCode(request)
-    if (path === '/api/auth/logout' && request.method === 'POST') {
+    if (path === '/auth/request' && request.method === 'POST') return this.requestCode(request)
+    if (path === '/auth/verify' && request.method === 'POST') return this.verifyCode(request)
+    if (path === '/auth/logout' && request.method === 'POST') {
       return Response.json({ ok: true }, { headers: { 'Set-Cookie': 'ij_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict' } })
+    }
+    if (path === '/activity' && request.method === 'GET') {
+      const subject = request.headers.get('x-ij-subject')
+      const allowed = subject && await this.consumeSubjectBudget(`activity-list:${subject}`, 300, 24 * 60 * 60 * 1000)
+      if (!allowed) return jsonError('Activity refresh limit reached for today.', 429)
+      const items = await this.state.storage.list({ prefix: 'activity:', limit: 500 })
+      return Response.json(Array.from(items.values()).sort((left, right) => right.date.localeCompare(left.date)))
+    }
+    if (path === '/activity/read-budget' && request.method === 'POST') {
+      const subject = request.headers.get('x-ij-subject')
+      const data = await readJson(request)
+      const budgetName = data?.type === 'image' ? 'activity-image-read' : 'activity-list'
+      const limit = data?.type === 'image' ? 5000 : 300
+      const allowed = subject && await this.consumeSubjectBudget(`${budgetName}:${subject}`, limit, 24 * 60 * 60 * 1000)
+      return allowed ? Response.json({ ok: true }) : jsonError('Daily activity read limit reached.', 429)
+    }
+    if (path === '/activity' && request.method === 'POST') return this.createActivity(request)
+    if (path === '/activity/images' && request.method === 'POST') return this.createImageActivities(request)
+    if (path === '/activity/images/reserve' && request.method === 'POST') {
+      const subject = request.headers.get('x-ij-subject')
+      const data = await readJson(request)
+      const count = Number(data?.count)
+      if (!subject || !Number.isInteger(count) || count < 1 || count > MAX_IMAGES_PER_UPLOAD) return jsonError('Invalid image upload.', 400)
+      if (!await this.consumeSubjectBudget(`activityrate:${subject}`, 40, 24 * 60 * 60 * 1000, count)) return jsonError('Daily activity limit reached.', 429)
+      return Response.json({ ok: true })
     }
     if (path === '/api/admin/unlock' && request.method === 'POST') return this.unlock(request)
     if (path === '/session/check' && request.method === 'GET') {
@@ -179,6 +252,71 @@ export class AuthState {
       this.state.storage.delete(`challenge:${addressKey}`),
     ])
     return Response.json({ ok: true })
+  }
+
+  async createActivity(request) {
+    const data = await readJson(request)
+    const subject = request.headers.get('x-ij-subject')
+    const date = validActivityDate(data?.date)
+    const title = typeof data?.title === 'string' ? data.title.trim().slice(0, 80) : ''
+    if (!subject || data?.kind !== 'game' || !date || !title || !GAMES_ALLOWED.has(data.gameId)) return jsonError('Invalid saved game.', 400)
+    const rateKey = `activityrate:${subject}`
+    const allowed = await this.consumeSubjectBudget(rateKey, 40, 24 * 60 * 60 * 1000)
+    if (!allowed) return jsonError('Daily activity limit reached.', 429)
+    const item = {
+      id: crypto.randomUUID(),
+      kind: 'game',
+      date,
+      createdAt: new Date().toISOString(),
+      author: safeName(data.author),
+      title,
+      note: typeof data.note === 'string' ? data.note.trim().slice(0, 500) : '',
+    }
+    await this.state.storage.put(`activity:${item.id}`, item)
+    return Response.json(item, { status: 201 })
+  }
+
+  async createImageActivities(request) {
+    const data = await readJson(request)
+    const subject = request.headers.get('x-ij-subject')
+    if (!subject || !Array.isArray(data?.items) || data.items.length < 1 || data.items.length > MAX_IMAGES_PER_UPLOAD) return jsonError('Choose between one and five images.', 400)
+    const ids = data.items.map((item) => item?.id)
+    if (ids.some((id) => typeof id !== 'string' || !/^[a-f0-9-]{36}$/i.test(id))) return jsonError('Invalid image metadata.', 400)
+    const groupIds = new Set(data.items.map((item) => item.groupId).filter(Boolean))
+    if (groupIds.size > 1) return jsonError('Images in one upload must share the same group.', 400)
+    const records = data.items.map((item) => {
+      const date = validActivityDate(item.date)
+      const mimeType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(item.mimeType) ? item.mimeType : ''
+      if (!date || !mimeType) return null
+      return {
+        id: item.id,
+        kind: 'image',
+        date,
+        createdAt: new Date().toISOString(),
+        author: safeName(item.author),
+        caption: typeof item.caption === 'string' ? item.caption.trim().slice(0, 240) : '',
+        groupId: typeof item.groupId === 'string' ? item.groupId : null,
+        mimeType,
+      }
+    })
+    if (records.some((item) => !item)) return jsonError('Invalid image metadata.', 400)
+    await Promise.all(records.map((item) => this.state.storage.put(`activity:${item.id}`, item)))
+    return Response.json(records, { status: 201 })
+  }
+
+  async consumeSubjectBudget(key, limit, windowMs, amount = 1) {
+    const now = Date.now()
+    return this.state.storage.transaction(async (transaction) => {
+      const budget = await transaction.get(key) || { startedAt: now, count: 0 }
+      if (now - budget.startedAt >= windowMs) {
+        budget.startedAt = now
+        budget.count = 0
+      }
+      if (budget.count + amount > limit) return false
+      budget.count += amount
+      await transaction.put(key, budget)
+      return true
+    })
   }
 
   async consumeIpBudget(request, category, limit, windowMs) {
@@ -297,6 +435,10 @@ export class LobbyRoom {
       this.gameStarted = true
       await this.state.storage.put('gameStarted', true)
       this.broadcast({ type: 'game-started', gameId: this.gameId })
+    } else if (message.type === 'finish' && attachment.peerId === this.hostId && this.gameStarted) {
+      this.gameStarted = false
+      await this.state.storage.put('gameStarted', false)
+      this.broadcast({ type: 'game-finished', gameId: this.gameId })
     }
   }
 
@@ -351,12 +493,96 @@ async function verifySession(request, env) {
 }
 
 async function hasValidSession(request, env) {
+  return Boolean(await getActiveSession(request, env))
+}
+
+async function getActiveSession(request, env) {
   const session = await verifySession(request, env)
-  if (!session) return false
+  if (!session) return null
   const id = env.AUTH.idFromName('auth-state')
   const check = await env.AUTH.get(id).fetch(`https://auth-state/session/check?subject=${encodeURIComponent(session.sub)}`)
-  if (!check.ok) return false
-  return Boolean((await check.json()).authorized)
+  if (!check.ok || !(await check.json()).authorized) return null
+  return session
+}
+
+async function saveActivityImages(request, env, session) {
+  const form = await request.formData()
+  const files = form.getAll('images').filter((value) => value instanceof File)
+  if (!files.length || files.length > MAX_IMAGES_PER_UPLOAD) return jsonError('Choose between one and five images.', 400)
+  const grouped = form.get('group') === 'true'
+  let dates = []
+  try { dates = JSON.parse(String(form.get('dates') || '[]')) } catch { return jsonError('Invalid image dates.', 400) }
+  if (!Array.isArray(dates) || dates.length !== files.length) return jsonError('Choose a date and time for each image.', 400)
+  const normalizedDates = dates.map(validActivityDate)
+  if (normalizedDates.some((date) => !date)) return jsonError('Choose a valid date and time.', 400)
+  if (grouped && normalizedDates.some((date) => date !== normalizedDates[0])) return jsonError('Grouped images must share one date and time.', 400)
+  if (files.some((file) => file.size < 1 || file.size > MAX_IMAGE_BYTES || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type))) {
+    return jsonError('Images must be JPEG, PNG, WebP, or GIF, no larger than 4 MB each.', 413)
+  }
+  const subject = session.sub
+  const authId = env.AUTH.idFromName('auth-state')
+  const reserve = await env.AUTH.get(authId).fetch('https://auth-state/activity/images/reserve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-ij-subject': subject },
+    body: JSON.stringify({ count: files.length }),
+  })
+  if (!reserve.ok) return new Response(await reserve.text(), { status: reserve.status, headers: { 'Content-Type': 'application/json' } })
+
+  let captions = []
+  try { captions = JSON.parse(String(form.get('captions') || '[]')) } catch { return jsonError('Invalid image captions.', 400) }
+  if (!Array.isArray(captions) || captions.length !== files.length) return jsonError('Invalid image captions.', 400)
+  const groupId = grouped ? crypto.randomUUID() : null
+  const author = safeName(form.get('author'))
+  const items = []
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index]
+      const id = crypto.randomUUID()
+      await env.ACTIVITY_MEDIA.put(`activity/${id}`, await file.arrayBuffer(), {
+        httpMetadata: { contentType: file.type },
+      })
+      items.push({
+        id,
+        kind: 'image',
+        date: normalizedDates[index],
+        author,
+        caption: typeof captions[index] === 'string' ? captions[index].trim().slice(0, 240) : '',
+        groupId,
+        mimeType: file.type,
+      })
+    }
+    const metadataResponse = await env.AUTH.get(authId).fetch('https://auth-state/activity/images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-ij-subject': subject },
+      body: JSON.stringify({ items }),
+    })
+    if (!metadataResponse.ok) throw new Error('Could not save image metadata.')
+    return new Response(await metadataResponse.text(), { status: 201, headers: { 'Content-Type': 'application/json' } })
+  } catch {
+    await Promise.all(items.map((item) => env.ACTIVITY_MEDIA.delete(`activity/${item.id}`)))
+    return jsonError('Could not save the selected images.', 500)
+  }
+}
+
+async function requestActivityReadBudget(env, subject, type) {
+  const id = env.AUTH.idFromName('auth-state')
+  return env.AUTH.get(id).fetch('https://auth-state/activity/read-budget', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-ij-subject': subject },
+    body: JSON.stringify({ type }),
+  })
+}
+
+function validActivityDate(value) {
+  if (typeof value !== 'string') return ''
+  const milliseconds = Date.parse(value)
+  if (!Number.isFinite(milliseconds) || milliseconds < Date.UTC(2000, 0, 1) || milliseconds > Date.now() + 366 * 24 * 60 * 60 * 1000) return ''
+  return new Date(milliseconds).toISOString()
+}
+
+function safeName(value) {
+  if (typeof value !== 'string') return 'A friend'
+  return value.trim().replace(/[<>\r\n]/g, '').slice(0, 32) || 'A friend'
 }
 
 async function makeSessionToken(subject, env) {

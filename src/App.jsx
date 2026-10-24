@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import ActivityTimeline from './ActivityTimeline'
 import './App.css'
 
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || window.location.origin
@@ -11,6 +12,11 @@ const GAMES = [
 ]
 const makeId = () => crypto.randomUUID()
 const makeCode = () => Array.from({ length: 6 }, () => String.fromCharCode(65 + Math.random() * 26)).join('')
+const localDateTimeNow = () => {
+  const date = new Date()
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 function App() {
   const [authState, setAuthState] = useState('checking')
@@ -20,11 +26,14 @@ function App() {
   const [authMessage, setAuthMessage] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [name, setName] = useState(() => localStorage.getItem('player-name') || '')
-  const [codeInput, setCodeInput] = useState('')
   const [roomCode, setRoomCode] = useState('')
   const [selectedGame, setSelectedGame] = useState('chess')
   const [gameStarted, setGameStarted] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [finishDialogOpen, setFinishDialogOpen] = useState(false)
+  const [finishDate, setFinishDate] = useState(localDateTimeNow)
+  const [finishNote, setFinishNote] = useState('')
+  const [finishBusy, setFinishBusy] = useState(false)
   const [peerId, setPeerId] = useState('')
   const [players, setPlayers] = useState([])
   const [connectedPeers, setConnectedPeers] = useState([])
@@ -244,6 +253,7 @@ function App() {
         }
         if (message.type === 'game') setSelectedGame(message.gameId)
         if (message.type === 'game-started') setGameStarted(true)
+        if (message.type === 'game-finished') leaveLobby()
         if (message.type === 'signal') await handleSignal(message.from, message.payload)
         if (message.type === 'error') {
           setNotice(message.message || 'Could not join this lobby.')
@@ -269,9 +279,8 @@ function App() {
   }
 
   const createLobby = () => connect(makeCode())
-  const joinLobby = (event) => {
-    event.preventDefault()
-    const code = codeInput.replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6)
+  const joinWithCode = (value) => {
+    const code = value.replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6)
     if (code.length !== 6) {
       setNotice('Lobby codes contain six letters.')
       return
@@ -304,6 +313,37 @@ function App() {
     if (!isHost || !connectedPeers.length) return
     socketRef.current?.send(JSON.stringify({ type: 'start' }))
     setGameStarted(true)
+  }
+
+  const saveFinishedGame = async (event) => {
+    event.preventDefault()
+    if (!isHost || !finishDate) return
+    setFinishBusy(true)
+    setNotice('')
+    try {
+      const response = await fetch('/api/activity', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'game',
+          gameId: selectedGame,
+          title: GAMES.find((game) => game.id === selectedGame)?.name || 'Game',
+          date: new Date(finishDate).toISOString(),
+          author: name.trim(),
+          note: finishNote,
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not save the game.')
+      socketRef.current?.send(JSON.stringify({ type: 'finish' }))
+      setFinishDialogOpen(false)
+      setFinishNote('')
+    } catch (error) {
+      setNotice(error.message || 'Could not save the game.')
+    } finally {
+      setFinishBusy(false)
+    }
   }
 
   const sendTurn = (event) => {
@@ -399,28 +439,7 @@ function App() {
           </section>
         </section>
       ) : !roomCode ? (
-        <section className="lobby-home" id="home">
-          <div className="intro">
-            <p className="eyebrow">A TABLE FOR YOUR PEOPLE</p>
-            <h1>Make a move.<br /><em>Keep the table.</em></h1>
-            <p className="intro-copy">A lightweight room for turn-based games. Your moves travel directly between players, not through a game server.</p>
-            <div className="network-note"><span className="note-icon">↗</span><span><strong>Peer to peer</strong><br />A small lobby service matches players. Board-game turns go direct.</span></div>
-          </div>
-          <section className="entry-panel" aria-label="Lobby controls">
-            <div className="panel-heading"><div><p className="eyebrow">GET TO THE TABLE</p><h2>Start playing</h2></div><span className="panel-index">01 / 02</span></div>
-            <label className="field-label" htmlFor="player-name">YOUR NAME</label>
-            <input id="player-name" autoComplete="nickname" maxLength={24} placeholder="e.g. Jordan" value={name} onChange={(event) => setName(event.target.value)} />
-            <button className="primary-button" onClick={createLobby}>Create a lobby <span aria-hidden="true">↗</span></button>
-            <div className="rule"><span>OR JOIN A TABLE</span></div>
-            <form onSubmit={joinLobby} className="join-form">
-              <label className="field-label" htmlFor="lobby-code">SIX-LETTER CODE</label>
-              <div className="code-entry"><input id="lobby-code" maxLength={6} autoCapitalize="characters" autoComplete="off" placeholder="ABCDEF" value={codeInput} onChange={(event) => setCodeInput(event.target.value.replace(/[^a-z]/gi, '').toUpperCase())} /><button className="join-button" aria-label="Join lobby">Join <span aria-hidden="true">→</span></button></div>
-            </form>
-            {notice && <p className="notice" role="status">{notice}</p>}
-            <p className="panel-foot">No account needed <span>·</span> Up to six players</p>
-          </section>
-          <div className="home-footer"><span>I LIKE JORDAN / 001</span><span>THE GAME STAYS WITH YOU</span><span>SCROLL NOT REQUIRED</span></div>
-        </section>
+        <ActivityTimeline name={name} onNameChange={(value) => { setName(value); localStorage.setItem('player-name', value) }} onCreateLobby={createLobby} onJoinLobby={joinWithCode} />
       ) : !gameStarted ? (
         <section className="room-view">
           <div className="room-head">
@@ -445,7 +464,7 @@ function App() {
         <section className="room-view">
           <div className="room-head">
             <div><p className="eyebrow">IN GAME / {isHost ? 'HOST' : 'PLAYER'}</p><h1>{GAMES.find((game) => game.id === selectedGame)?.name || 'Game'} <em>in progress.</em></h1></div>
-            <div className="game-menu-wrap"><button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen}>☰ <span>Game menu</span></button>{menuOpen && <div className="game-menu" role="dialog" aria-label="In-game menu"><p className="eyebrow">TABLE MENU</p><strong>{GAMES.find((game) => game.id === selectedGame)?.name}</strong><span className="menu-player-count">{players.length + 1} players · {isHost ? 'Host' : 'Player'}</span><button onClick={() => setMenuOpen(false)}>Resume game <span>→</span></button><button className="menu-leave" onClick={leaveLobby}>Leave table <span>↗</span></button></div>}</div>
+            <div className="game-menu-wrap"><button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen}>☰ <span>Game menu</span></button>{menuOpen && <div className="game-menu" role="dialog" aria-label="In-game menu"><p className="eyebrow">TABLE MENU</p><strong>{GAMES.find((game) => game.id === selectedGame)?.name}</strong><span className="menu-player-count">{players.length + 1} players · {isHost ? 'Host' : 'Player'}</span><button onClick={() => setMenuOpen(false)}>Resume game <span>→</span></button>{isHost && <button onClick={() => { setMenuOpen(false); setFinishDate(localDateTimeNow()); setFinishDialogOpen(true) }}>Finish &amp; save game <span>✓</span></button>}<button className="menu-leave" onClick={leaveLobby}>Leave table <span>↗</span></button></div>}</div>
           </div>
           {notice && <p className="notice room-notice" role="status">{notice}</p>}
           <div className="room-columns">
@@ -460,6 +479,7 @@ function App() {
           </div>
         </section>
       )}
+      {finishDialogOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !finishBusy) setFinishDialogOpen(false) }}><section className="activity-modal finish-game-modal" role="dialog" aria-modal="true" aria-labelledby="finish-game-title"><div className="modal-heading"><div><p className="eyebrow">ADD TO YOUR SHARED DAYS</p><h2 id="finish-game-title">Finish this game</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setFinishDialogOpen(false)}>×</button></div><p className="auth-copy">Choose when this game should appear in your archive.</p><form onSubmit={saveFinishedGame}><label className="field-label" htmlFor="game-finished-date">DATE AND TIME</label><input id="game-finished-date" className="date-input" type="datetime-local" required value={finishDate} onChange={(event) => setFinishDate(event.target.value)} /><label className="field-label finish-note-label" htmlFor="game-finished-note">A NOTE (OPTIONAL)</label><textarea id="game-finished-note" className="caption-input finish-note-input" maxLength={500} placeholder="A favorite moment from the game…" value={finishNote} onChange={(event) => setFinishNote(event.target.value)} />{notice && <p className="notice" role="status">{notice}</p>}<button className="primary-button" disabled={finishBusy}>{finishBusy ? 'Saving…' : 'Save and conclude'} <span aria-hidden="true">✓</span></button></form></section></div>}
     </main>
   )
 }

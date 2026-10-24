@@ -19,6 +19,10 @@ bindings = [
 	{ name = "AUTH", class_name = "AuthState" }
 ]
 
+[[r2_buckets]]
+binding = "ACTIVITY_MEDIA"
+bucket_name = "i-like-jordan-activity"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["LobbyRoom"]
