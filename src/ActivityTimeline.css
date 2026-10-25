@@ -110,3 +110,10 @@
   .archive-footer { gap: 14px; font-size: 7px; }
   .activity-modal { padding: 21px 18px 18px; }
 }
+.review-turns { align-self: flex-start; height: 30px; margin: 0 0 12px; }
+.turn-review { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.turn-review li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.turn-number { color: #9a9990; font-family: var(--mono); font-size: 10px; }
+.turn-review strong { color: var(--ink); font-size: 12px; }
+.turn-review p { margin: 2px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.turn-review time { color: #99988e; font-family: var(--mono); font-size: 9px; }

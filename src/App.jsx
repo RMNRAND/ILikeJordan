@@ -100,7 +100,7 @@ function App() {
   }
 
   const appendEvent = (event) => {
-    setEvents((current) => current.some((item) => item.id === event.id) ? current : [...current, event].slice(-200))
+    setEvents((current) => current.some((item) => item.id === event.id) ? current : [...current, event].slice(-500))
   }
 
   const publishEvent = (event) => {
@@ -259,7 +259,7 @@ function App() {
           }
         }
         if (message.type === 'game') setSelectedGame(message.gameId)
-        if (message.type === 'game-started') setGameStarted(true)
+        if (message.type === 'game-started') { setEvents([]); setGameStarted(true) }
         if (message.type === 'game-finished') leaveLobby()
         if (message.type === 'signal') await handleSignal(message.from, message.payload)
         if (message.type === 'error') {
@@ -311,6 +311,7 @@ function App() {
   const startGame = () => {
     if (!isHost || !connectedPeers.length) return
     socketRef.current?.send(JSON.stringify({ type: 'start' }))
+    setEvents([])
     setGameStarted(true)
   }
 
@@ -331,6 +332,7 @@ function App() {
           date: new Date(finishDate).toISOString(),
           author: name.trim(),
           note: finishNote,
+          turns: eventsRef.current,
         }),
       })
       const result = await response.json()

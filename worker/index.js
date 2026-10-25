@@ -36,7 +36,7 @@ export default {
       const session = await getActiveSession(request, env)
       if (!session) return new Response('Authentication required', { status: 401 })
       if (request.method === 'POST' && request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
-      if (Number(request.headers.get('Content-Length') || 0) > 32_768) return new Response('Request too large', { status: 413 })
+      if (Number(request.headers.get('Content-Length') || 0) > 262_144) return new Response('Request too large', { status: 413 })
       const id = env.AUTH.idFromName('auth-state')
       const headers = new Headers(request.headers)
       headers.set('x-ij-subject', session.sub)
@@ -47,6 +47,15 @@ export default {
         headers,
         body: request.method === 'GET' ? undefined : request.body,
       }))
+    }
+
+    const turnsMatch = url.pathname.match(/^\/api\/activity\/turns\/([a-f0-9-]{36})$/i)
+    if (turnsMatch && request.method === 'GET') {
+      const session = await getActiveSession(request, env)
+      if (!session) return new Response('Authentication required', { status: 401 })
+      const headers = new Headers(request.headers)
+      headers.set('x-ij-subject', session.sub)
+      return env.AUTH.get(env.AUTH.idFromName('auth-state')).fetch(new Request(`https://auth-state/activity/turns/${turnsMatch[1]}`, { headers }))
     }
 
     if (url.pathname === '/api/activity/layout' && request.method === 'PATCH') {
@@ -141,6 +150,12 @@ export class AuthState {
       const limit = data?.type === 'image' ? 5000 : 300
       const allowed = subject && await this.consumeSubjectBudget(`${budgetName}:${subject}`, limit, 24 * 60 * 60 * 1000)
       return allowed ? Response.json({ ok: true }) : jsonError('Daily activity read limit reached.', 429)
+    }
+    const turnsRoute = path.match(/^\/activity\/turns\/([a-f0-9-]{36})$/i)
+    if (turnsRoute && request.method === 'GET') {
+      const subject = request.headers.get('x-ij-subject')
+      if (!subject || !await this.consumeSubjectBudget(`activity-turns:${subject}`, 300, 24 * 60 * 60 * 1000)) return jsonError('Daily turn review limit reached.', 429)
+      return Response.json(await this.state.storage.get(`gameturns:${turnsRoute[1]}`) || [])
     }
     if (path === '/activity' && request.method === 'POST') return this.createActivity(request)
     if (path === '/activity/images' && request.method === 'POST') return this.createImageActivities(request)
@@ -276,6 +291,12 @@ export class AuthState {
     const rateKey = `activityrate:${subject}`
     const allowed = await this.consumeSubjectBudget(rateKey, 40, 24 * 60 * 60 * 1000)
     if (!allowed) return jsonError('Daily activity limit reached.', 429)
+    const turns = Array.isArray(data.turns) ? data.turns.slice(0, 500).filter((turn) => typeof turn?.id === 'string' && typeof turn?.text === 'string').map((turn) => ({
+      id: turn.id.slice(0, 64),
+      player: safeName(turn.player),
+      text: turn.text.trim().slice(0, 300),
+      time: Number.isFinite(turn.time) ? turn.time : 0,
+    })) : []
     const item = {
       id: crypto.randomUUID(),
       kind: 'game',
@@ -284,7 +305,9 @@ export class AuthState {
       author: safeName(data.author),
       title,
       note: typeof data.note === 'string' ? data.note.trim().slice(0, 500) : '',
+      turnCount: turns.length,
     }
+    if (turns.length) await this.state.storage.put(`gameturns:${item.id}`, turns)
     await this.state.storage.put(`activity:${item.id}`, item)
     return Response.json(item, { status: 201 })
   }

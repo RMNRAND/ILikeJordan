@@ -39,6 +39,18 @@ function ActivityTimeline({ name, onNameChange, onPlay }) {
   const [touchStart, setTouchStart] = useState(null)
   const [profileMessage, setProfileMessage] = useState('')
   const [collage, setCollage] = useState(null)
+  const [review, setReview] = useState(null)
+
+  const openReview = async (game) => {
+    setReview({ game, turns: null, error: '' })
+    try {
+      const response = await fetch(`/api/activity/turns/${game.id}`, { credentials: 'same-origin' })
+      if (!response.ok) throw new Error('Could not load the turns.')
+      setReview({ game, turns: await response.json(), error: '' })
+    } catch (error) {
+      setReview({ game, turns: [], error: error.message })
+    }
+  }
   const scrollBeforeCollage = useRef(0)
 
   const openCollage = (next) => { scrollBeforeCollage.current = window.scrollY; setCollage(next) }
@@ -225,7 +237,7 @@ function ActivityTimeline({ name, onNameChange, onPlay }) {
             <div className="memory-grid">
               {groupedCards(section.items).map((group) => {
                 const first = group[0]
-                if (first.kind === 'game') return <article className="game-memory" key={first.id}><div className="memory-topline"><span className="memory-type">GAME SAVED</span><time>{formatTime(first.date)}</time></div><div className="game-memory-symbol">♟</div><h2>{first.title}</h2>{first.note && <p>{first.note}</p>}<footer><span>{first.author}</span><span>{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(first.date))}</span></footer></article>
+                if (first.kind === 'game') return <article className="game-memory" key={first.id}><div className="memory-topline"><span className="memory-type">GAME SAVED</span><time>{formatTime(first.date)}</time></div><div className="game-memory-symbol">♟</div><h2>{first.title}</h2>{first.note && <p>{first.note}</p>}{first.turnCount > 0 && <button className="text-button review-turns" onClick={() => openReview(first)}>Review {first.turnCount} {first.turnCount === 1 ? 'turn' : 'turns'}</button>}<footer><span>{first.author}</span><span>{new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(first.date))}</span></footer></article>
                 return <article className={`photo-memory ${group.length > 1 ? 'photo-memory-group' : ''}`} key={first.groupId || first.id}><button className="edit-pencil" aria-label="Edit collage" title="Edit collage" onClick={() => openCollage({ ids: group.map((photo) => photo.id), editing: true })}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z" /></svg></button><div className="photo-memory-grid" role="button" tabIndex={0} aria-label="Open collage" onClick={() => openCollage({ ids: group.map((photo) => photo.id), editing: false })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setCollage({ ids: group.map((photo) => photo.id), editing: false }) } }}>{group.map((photo) => <figure key={photo.id}><img src={`/api/activity/images/${photo.id}`} alt={photo.caption || 'Shared memory'} loading="lazy" /><figcaption>{photo.caption}</figcaption></figure>)}</div><div className="photo-memory-meta"><span>{first.author}{first.postCaption ? ` · ${first.postCaption}` : ''}</span><time>{formatTime(first.date)}</time></div></article>
               })}
             </div>
@@ -239,6 +251,7 @@ function ActivityTimeline({ name, onNameChange, onPlay }) {
             <div className="upload-list">{selectedFiles.map((file, index) => <div className="upload-row" key={`${file.name}-${file.lastModified}-${index}`}><img src={previews[index]} alt="" /><div className="upload-fields"><strong>{file.name}</strong>{!groupTogether && <input aria-label={`Date and time for ${file.name}`} className="date-input" type="datetime-local" value={individualDates[index] || sharedDate} onChange={(event) => setIndividualDates((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} />}<input aria-label={`Caption for ${file.name}`} className="caption-input" maxLength={240} placeholder="Add a caption (optional)" value={captions[index] || ''} onChange={(event) => setCaptions((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} /></div><button type="button" className="remove-image" aria-label={`Remove ${file.name}`} onClick={() => removeFile(index)}>×</button></div>)}</div>
             {message && <p className="notice" role="status">{message}</p>}<div className="modal-footer"><span>{uploading ? `Saving ${uploadProgress} / ${selectedFiles.length}…` : `${selectedFiles.length} / ${MAX_FILES} photos`}</span><button className="primary-button" disabled={!selectedFiles.length || uploading}>{uploading ? 'Saving…' : 'Save moment'} <span aria-hidden="true">↑</span></button></div></form></section></div>}
 
+      {review && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReview(null) }}><section className="activity-modal" role="dialog" aria-modal="true" aria-labelledby="review-title"><div className="modal-heading"><div><p className="eyebrow">TURN HISTORY</p><h2 id="review-title">{review.game.title}</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setReview(null)}>×</button></div>{review.turns === null ? <p className="auth-copy">Loading turns…</p> : review.error ? <p className="notice" role="status">{review.error}</p> : <ol className="turn-review">{review.turns.map((turn, index) => <li key={turn.id}><span className="turn-number">{index + 1}</span><div><strong>{turn.player}</strong><p>{turn.text}</p></div><time>{formatTime(turn.time)}</time></li>)}</ol>}</section></div>}
     </section>
   )
 }
