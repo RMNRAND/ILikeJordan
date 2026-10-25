@@ -86,7 +86,7 @@ export default {
       } })
     }
 
-    const roomMatch = url.pathname.match(/^\/room\/([A-Z]{6})$/)
+    const roomMatch = url.pathname.match(/^\/room\/(main)$/)
     if (roomMatch) {
       if (!await hasValidSession(request, env)) return new Response('Authentication required', { status: 401 })
       if (request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
@@ -460,7 +460,7 @@ export class LobbyRoom {
         this.sockets.get(peerId)?.serializeAttachment(peer)
       })
       this.broadcast({ type: 'membership', hostId: this.hostId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted })
-    } else if (message.type === 'game' && attachment.peerId === this.hostId && ['chess', 'catan', 'ticket-to-ride', 'custom'].includes(message.gameId) && !this.gameStarted) {
+    } else if (message.type === 'game' && ['chess', 'catan', 'ticket-to-ride', 'custom'].includes(message.gameId) && !this.gameStarted) {
       this.gameId = message.gameId
       await this.state.storage.put('gameId', this.gameId)
       this.broadcast({ type: 'game', gameId: this.gameId })

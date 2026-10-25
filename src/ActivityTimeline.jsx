@@ -22,13 +22,12 @@ function formatTime(value) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 }
 
-function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
+function ActivityTimeline({ name, onNameChange, onPlay }) {
   const [items, setItems] = useState([])
   const [scale, setScale] = useState('D')
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [composerOpen, setComposerOpen] = useState(false)
-  const [playOpen, setPlayOpen] = useState(false)
   const [groupTogether, setGroupTogether] = useState(true)
   const [sharedDate, setSharedDate] = useState(() => localDateTime())
   const [selectedFiles, setSelectedFiles] = useState([])
@@ -37,7 +36,6 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
   const [individualDates, setIndividualDates] = useState([])
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [joinCode, setJoinCode] = useState('')
   const [touchStart, setTouchStart] = useState(null)
   const [profileMessage, setProfileMessage] = useState('')
   const [collage, setCollage] = useState(null)
@@ -185,26 +183,13 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
     setItems((current) => current.map((item) => byId.get(item.id) || item))
   }
 
-  const createGameLobby = () => {
+  const playTogether = () => {
     if (!name.trim()) {
-      setProfileMessage('Add your name before starting a table.')
-      setPlayOpen(false)
+      setProfileMessage('Add your name before joining the table.')
       return
     }
     setProfileMessage('')
-    onCreateLobby()
-  }
-
-  const joinGameLobby = (event) => {
-    event.preventDefault()
-    if (!name.trim()) {
-      setProfileMessage('Add your name before joining a table.')
-      setPlayOpen(false)
-      return
-    }
-    setProfileMessage('')
-    onJoinLobby(joinCode)
-    setPlayOpen(false)
+    onPlay()
   }
 
   if (collage) return <Collage key={collage.ids.join()} photos={items.filter((item) => collage.ids.includes(item.id))} startEditing={collage.editing} onSave={saveCollage} onClose={closeCollage} />
@@ -219,7 +204,7 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
         </div>
         <div className="activity-actions">
           <button className="icon-action plus-action" aria-label="Add photos" title="Add photos" onClick={() => { setMessage(''); setComposerOpen(true) }}>+</button>
-          <button className="icon-action game-action" aria-label="Start or join a game" title="Start or join a game" onClick={() => setPlayOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.75c0-.77.84-1.25 1.5-.86l9.5 5.5a1 1 0 0 1 0 1.72l-9.5 5.5c-.66.39-1.5-.09-1.5-.86z" /></svg></button>
+          <button className="icon-action game-action" aria-label="Play" title="Play" onClick={playTogether}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.75c0-.77.84-1.25 1.5-.86l9.5 5.5a1 1 0 0 1 0 1.72l-9.5 5.5c-.66.39-1.5-.09-1.5-.86z" /></svg></button>
         </div>
       </div>
       {profileMessage && <p className="activity-message" role="status">{profileMessage}</p>}
@@ -254,7 +239,6 @@ function ActivityTimeline({ name, onNameChange, onCreateLobby, onJoinLobby }) {
             <div className="upload-list">{selectedFiles.map((file, index) => <div className="upload-row" key={`${file.name}-${file.lastModified}-${index}`}><img src={previews[index]} alt="" /><div className="upload-fields"><strong>{file.name}</strong>{!groupTogether && <input aria-label={`Date and time for ${file.name}`} className="date-input" type="datetime-local" value={individualDates[index] || sharedDate} onChange={(event) => setIndividualDates((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} />}<input aria-label={`Caption for ${file.name}`} className="caption-input" maxLength={240} placeholder="Add a caption (optional)" value={captions[index] || ''} onChange={(event) => setCaptions((current) => current.map((value, currentIndex) => currentIndex === index ? event.target.value : value))} /></div><button type="button" className="remove-image" aria-label={`Remove ${file.name}`} onClick={() => removeFile(index)}>×</button></div>)}</div>
             {message && <p className="notice" role="status">{message}</p>}<div className="modal-footer"><span>{uploading ? `Saving ${uploadProgress} / ${selectedFiles.length}…` : `${selectedFiles.length} / ${MAX_FILES} photos`}</span><button className="primary-button" disabled={!selectedFiles.length || uploading}>{uploading ? 'Saving…' : 'Save moment'} <span aria-hidden="true">↑</span></button></div></form></section></div>}
 
-      {playOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlayOpen(false) }}><section className="activity-modal play-modal" role="dialog" aria-modal="true" aria-labelledby="play-title"><div className="modal-heading"><div><p className="eyebrow">PLAY TOGETHER</p><h2 id="play-title">Find a table</h2></div><button className="icon-action close-action" aria-label="Close" onClick={() => setPlayOpen(false)}>×</button></div><p className="auth-copy">Start a new room or join with a six-letter code.</p><button className="primary-button" onClick={createGameLobby}>Create a lobby <span aria-hidden="true">↗</span></button><form className="play-join-form" onSubmit={joinGameLobby}><label className="field-label" htmlFor="activity-lobby-code">LOBBY CODE</label><div className="code-entry"><input id="activity-lobby-code" maxLength={6} autoCapitalize="characters" placeholder="ABCDEF" value={joinCode} onChange={(event) => setJoinCode(event.target.value.replace(/[^a-z]/gi, '').toUpperCase())} /><button className="join-button">Join <span aria-hidden="true">→</span></button></div></form></section></div>}
     </section>
   )
 }

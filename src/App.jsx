@@ -11,7 +11,6 @@ const GAMES = [
   { id: 'custom', name: 'Other game', detail: 'Bring your own rules' },
 ]
 const makeId = () => crypto.randomUUID()
-const makeCode = () => Array.from({ length: 6 }, () => String.fromCharCode(65 + Math.random() * 26)).join('')
 const localDateTimeNow = () => {
   const date = new Date()
   const pad = (value) => String(value).padStart(2, '0')
@@ -254,9 +253,9 @@ function App() {
             connectionsRef.current.delete(message.leftId)
             channelsRef.current.delete(message.leftId)
           }
-          if (roster.length < 2 && hostLeft) {
+          if (roster.length < 2 && hostLeft && message.gameStarted) {
             leaveLobby()
-            setNotice('The host left and there are not enough players to continue. Join another lobby when ready.')
+            setNotice('The host left and there are not enough players to continue.')
           }
         }
         if (message.type === 'game') setSelectedGame(message.gameId)
@@ -281,20 +280,12 @@ function App() {
       setPlayers([])
       setConnectedPeers([])
       setHostId('')
-      setNotice('Lobby connection ended. Create or join another table.')
+      setNotice('Lobby connection ended. Press play to rejoin.')
     }
     socket.onerror = () => setNotice('Could not reach the lobby service.')
   }
 
-  const createLobby = () => connect(makeCode())
-  const joinWithCode = (value) => {
-    const code = value.replace(/[^a-z]/gi, '').toUpperCase().slice(0, 6)
-    if (code.length !== 6) {
-      setNotice('Lobby codes contain six letters.')
-      return
-    }
-    connect(code)
-  }
+  const joinLobby = () => connect('main')
 
   const leaveLobby = () => {
     socketRef.current?.close()
@@ -312,7 +303,7 @@ function App() {
   }
 
   const chooseGame = (gameId) => {
-    if (!isHost || !GAMES.some((game) => game.id === gameId)) return
+    if (!GAMES.some((game) => game.id === gameId)) return
     setSelectedGame(gameId)
     socketRef.current?.send(JSON.stringify({ type: 'game', gameId }))
   }
@@ -361,11 +352,6 @@ function App() {
     publishEvent({ id: makeId(), player: name.trim(), text, time: Date.now() })
     setTurnText('')
     setNotice('')
-  }
-
-  const copyCode = async () => {
-    await navigator.clipboard.writeText(roomCode)
-    setNotice('Lobby code copied.')
   }
 
   const requestAuthCode = async (event) => {
@@ -447,12 +433,11 @@ function App() {
           </section>
         </section>
       ) : !roomCode ? (
-        <ActivityTimeline name={name} onNameChange={(value) => { setName(value); localStorage.setItem('player-name', value) }} onCreateLobby={createLobby} onJoinLobby={joinWithCode} />
+        <ActivityTimeline name={name} onNameChange={(value) => { setName(value); localStorage.setItem('player-name', value) }} onPlay={joinLobby} />
       ) : !gameStarted ? (
         <section className="room-view">
           <div className="room-head">
             <div><button className="back-button" onClick={leaveLobby}>← Leave table</button><p className="eyebrow">LOBBY / {isHost ? 'HOST' : 'PLAYER'}</p><h1>Set up the <em>table.</em></h1></div>
-            <div className="room-code-wrap"><span className="field-label">INVITE PLAYERS</span><button className="room-code" onClick={copyCode} title="Copy lobby code">{roomCode}<span>▣</span></button></div>
           </div>
           {notice && <p className="notice room-notice" role="status">{notice}</p>}
           <div className="setup-columns">
@@ -462,9 +447,9 @@ function App() {
               </ul>
               <div className="room-actions"><div><span className={`status-dot ${linkState}`} /><span>{linkState === 'connected' ? `${connectedPeers.length} direct link${connectedPeers.length === 1 ? '' : 's'} ready` : 'Connecting to players…'}</span></div>{isHost && players.length > 0 && <button className="text-button" onClick={() => socketRef.current?.send(JSON.stringify({ type: 'host', target: players[0].id }))}>Pass host</button>}</div>
             </section>
-            <section className="game-select-panel"><div className="section-heading"><h2>Choose a game</h2><span>{isHost ? 'HOST PICKS' : 'HOST PICKING'}</span></div>
-              <div className="game-options" role="radiogroup" aria-label="Select a board game">{GAMES.map((game) => <button type="button" role="radio" aria-checked={selectedGame === game.id} disabled={!isHost} className={`game-option ${selectedGame === game.id ? 'selected' : ''}`} key={game.id} onClick={() => chooseGame(game.id)}><span className="game-choice-mark">{selectedGame === game.id ? '✓' : ''}</span><span><strong>{game.name}</strong><small>{game.detail}</small></span><span className="game-arrow">↗</span></button>)}</div>
-              <div className="start-area">{isHost ? <button className="primary-button start-button" disabled={!connectedPeers.length} onClick={startGame}>Start {GAMES.find((game) => game.id === selectedGame)?.name} <span aria-hidden="true">→</span></button> : <p className="waiting-copy">Waiting for the host to choose a game and start.</p>}<p className="connection-hint"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'Players connected directly' : 'Waiting for a direct player connection'}</p></div>
+            <section className="game-select-panel"><div className="section-heading"><h2>Choose a game</h2><span>ANYONE PICKS</span></div>
+              <div className="game-options" role="radiogroup" aria-label="Select a board game">{GAMES.map((game) => <button type="button" role="radio" aria-checked={selectedGame === game.id} className={`game-option ${selectedGame === game.id ? 'selected' : ''}`} key={game.id} onClick={() => chooseGame(game.id)}><span className="game-choice-mark">{selectedGame === game.id ? '✓' : ''}</span><span><strong>{game.name}</strong><small>{game.detail}</small></span><span className="game-arrow">↗</span></button>)}</div>
+              <div className="start-area">{isHost ? <button className="primary-button start-button" disabled={!connectedPeers.length} onClick={startGame}>Start {GAMES.find((game) => game.id === selectedGame)?.name} <span aria-hidden="true">→</span></button> : <p className="waiting-copy">Waiting for the host to start the game.</p>}<p className="connection-hint"><span className={`status-dot ${linkState}`} />{linkState === 'connected' ? 'Players connected directly' : 'Waiting for a direct player connection'}</p></div>
             </section>
           </div>
         </section>
