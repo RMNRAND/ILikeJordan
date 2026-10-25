@@ -110,7 +110,11 @@
   .archive-footer { gap: 14px; font-size: 7px; }
   .activity-modal { padding: 21px 18px 18px; }
 }
-.review-turns { align-self: flex-start; height: 30px; margin: 0 0 12px; }
+.game-memory { position: relative; cursor: pointer; }
+.game-memory.selected { outline: 2px solid var(--green); outline-offset: -2px; }
+.game-memory.selected .memory-topline { padding-right: 30px; }
+.delete-game { position: absolute; top: 8px; right: 8px; display: grid; width: 24px; height: 24px; place-items: center; padding: 0 0 2px; color: #fff; background: #a34f34; border: 0; border-radius: 50%; cursor: pointer; font-size: 17px; line-height: 1; }
+.delete-game:hover { background: #8a3f28; }
 .turn-review { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
 .turn-review li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .turn-number { color: #9a9990; font-family: var(--mono); font-size: 10px; }

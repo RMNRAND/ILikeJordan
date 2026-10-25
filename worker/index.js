@@ -49,6 +49,16 @@ export default {
       }))
     }
 
+    const deleteMatch = url.pathname.match(/^\/api\/activity\/([a-f0-9-]{36})$/i)
+    if (deleteMatch && request.method === 'DELETE') {
+      const session = await getActiveSession(request, env)
+      if (!session) return new Response('Authentication required', { status: 401 })
+      if (request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
+      const headers = new Headers(request.headers)
+      headers.set('x-ij-subject', session.sub)
+      return env.AUTH.get(env.AUTH.idFromName('auth-state')).fetch(new Request(`https://auth-state/activity/delete/${deleteMatch[1]}`, { method: 'POST', headers }))
+    }
+
     const turnsMatch = url.pathname.match(/^\/api\/activity\/turns\/([a-f0-9-]{36})$/i)
     if (turnsMatch && request.method === 'GET') {
       const session = await getActiveSession(request, env)
@@ -150,6 +160,13 @@ export class AuthState {
       const limit = data?.type === 'image' ? 5000 : 300
       const allowed = subject && await this.consumeSubjectBudget(`${budgetName}:${subject}`, limit, 24 * 60 * 60 * 1000)
       return allowed ? Response.json({ ok: true }) : jsonError('Daily activity read limit reached.', 429)
+    }
+    const deleteRoute = path.match(/^\/activity\/delete\/([a-f0-9-]{36})$/i)
+    if (deleteRoute && request.method === 'POST') {
+      const record = await this.state.storage.get(`activity:${deleteRoute[1]}`)
+      if (!record || record.kind !== 'game') return jsonError('Saved game not found.', 404)
+      await this.state.storage.delete([`activity:${record.id}`, `gameturns:${record.id}`])
+      return Response.json({ ok: true })
     }
     const turnsRoute = path.match(/^\/activity\/turns\/([a-f0-9-]{36})$/i)
     if (turnsRoute && request.method === 'GET') {
