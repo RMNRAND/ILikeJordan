@@ -57,8 +57,6 @@ export function legalSteps(state, seat) {
 export function wallProblem(state, o, x, y) {
   const inBounds = o === 'h' ? x >= 0 && x <= 9 && y >= 1 && y <= 10 : x >= 1 && x <= 10 && y >= 0 && y <= 9
   if (!inBounds) return 'Walls must sit on an inner edge.'
-  const cells = o === 'h' ? [[x, y - 1], [x + 1, y - 1], [x, y], [x + 1, y]] : [[x - 1, y], [x - 1, y + 1], [x, y], [x, y + 1]]
-  if (state.pos.some(([px, py]) => cells.some(([cx, cy]) => cx === px && cy === py))) return 'A player is standing beside that edge.'
   for (const wall of state.walls) {
     if (wall.o === o) {
       if (o === 'h' ? wall.y === y && Math.abs(wall.x - x) <= 1 : wall.x === x && Math.abs(wall.y - y) <= 1) return 'Walls cannot overlap.'
