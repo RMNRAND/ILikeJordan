@@ -9,7 +9,6 @@
 .wy-wall.ghost { stroke: #3f9b5a; opacity: .85; pointer-events: none; }
 .wy-wall.ghost.bad { stroke: #c0392b; }
 .wy-hit { fill: transparent; cursor: pointer; }
-.wy-hit:hover { fill: #5b687433; }
 .wy-token circle { stroke: #fff; stroke-width: 2; }
 .wy-token.active circle { stroke: var(--ink); stroke-width: 3; }
 .wy-token text { fill: #fff; font-size: 13px; font-weight: 700; pointer-events: none; }
