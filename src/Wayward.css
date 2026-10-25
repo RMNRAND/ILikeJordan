@@ -6,8 +6,8 @@
 .wy-dot { fill: var(--green); pointer-events: none; }
 .wy-label text { fill: #9a9990; font-family: var(--mono); font-size: 9px; }
 .wy-wall { stroke: var(--ink); stroke-width: 6; stroke-linecap: round; }
-.wy-wall.ghost { stroke: var(--green); opacity: .7; }
-.wy-wall.ghost.bad { stroke: #a34f34; }
+.wy-wall.ghost { stroke: #3f9b5a; opacity: .85; pointer-events: none; }
+.wy-wall.ghost.bad { stroke: #c0392b; }
 .wy-hit { fill: transparent; cursor: pointer; }
 .wy-hit:hover { fill: #5b687433; }
 .wy-token circle { stroke: #fff; stroke-width: 2; }
@@ -31,5 +31,4 @@
 [data-theme='dark'] .wy-cell { fill: #2a2d30; }
 [data-theme='dark'] .wy-cell.center { fill: #b08d2e; }
 [data-theme='dark'] .wy-cell.target { fill: #3a4650; }
-[data-theme='dark'] .wy-wall { stroke: #e8e8e4; }
 [data-theme='dark'] .wy-token circle { stroke: #1c1e20; }

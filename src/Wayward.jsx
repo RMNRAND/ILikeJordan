@@ -14,7 +14,7 @@ function wallLine(wall) {
     : { x1: at(wall.x), x2: at(wall.x), y1: at(wall.y) + 4, y2: at(wall.y + 2) - 4 }
 }
 
-function Board({ state, targets = [], onCell, wallMode, onSegment, ghost, ghostBad }) {
+function Board({ state, targets = [], onCell, wallMode, onSegment, onHover, ghost, ghostBad }) {
   const cells = []
   for (let y = 0; y < SIZE; y += 1) {
     for (let x = 0; x < SIZE; x += 1) {
@@ -26,8 +26,8 @@ function Board({ state, targets = [], onCell, wallMode, onSegment, ghost, ghostB
   if (wallMode) {
     for (let line = 1; line < SIZE; line += 1) {
       for (let index = 0; index < SIZE; index += 1) {
-        hits.push(<rect key={`h${line}-${index}`} className="wy-hit" x={at(index) + 4} y={at(line) - 6} width={CELL - 8} height={12} onClick={() => onSegment('h', Math.min(index, SIZE - 2), line)} />)
-        hits.push(<rect key={`v${line}-${index}`} className="wy-hit" x={at(line) - 6} y={at(index) + 4} width={12} height={CELL - 8} onClick={() => onSegment('v', line, Math.min(index, SIZE - 2))} />)
+        hits.push(<rect key={`h${line}-${index}`} className="wy-hit" x={at(index) + 4} y={at(line) - 6} width={CELL - 8} height={12} onClick={() => onSegment('h', Math.min(index, SIZE - 2), line)} onMouseEnter={onHover && (() => onHover({ o: 'h', x: Math.min(index, SIZE - 2), y: line }))} onMouseLeave={onHover && (() => onHover(null))} />)
+        hits.push(<rect key={`v${line}-${index}`} className="wy-hit" x={at(line) - 6} y={at(index) + 4} width={12} height={CELL - 8} onClick={() => onSegment('v', line, Math.min(index, SIZE - 2))} onMouseEnter={onHover && (() => onHover({ o: 'v', x: line, y: Math.min(index, SIZE - 2) }))} onMouseLeave={onHover && (() => onHover(null))} />)
       }
     }
   }
@@ -35,7 +35,7 @@ function Board({ state, targets = [], onCell, wallMode, onSegment, ghost, ghostB
     <svg className="wy-board" viewBox={`0 0 ${VIEW} ${VIEW}`} role="img" aria-label="Wayward board">
       {Array.from({ length: SIZE }, (_, index) => <g key={index} className="wy-label"><text x={at(index) + CELL / 2} y={13} textAnchor="middle">{'ABCDEFGHIJK'[index]}</text><text x={10} y={at(index) + CELL / 2 + 3} textAnchor="middle">{index + 1}</text></g>)}
       {cells}
-      {state.walls.map((wall, index) => <line key={index} className="wy-wall" {...wallLine(wall)} />)}
+      {state.walls.map((wall, index) => <line key={index} className="wy-wall" style={{ stroke: COLORS[wall.seat] }} {...wallLine(wall)} />)}
       {ghost && <line className={`wy-wall ghost${ghostBad ? ' bad' : ''}`} {...wallLine(ghost)} />}
       {state.pos.map(([x, y], seat) => (
         <g key={seat} className={`wy-token${state.turn === seat && state.winner === null ? ' active' : ''}`}>
@@ -67,6 +67,7 @@ export function Wayward({ events, selfId, roster, canAct, onMove }) {
   const steps = useMemo(() => replay(events), [events])
   const [mode, setMode] = useState('move')
   const [pending, setPending] = useState(null)
+  const [hoverPlacement] = useState(() => window.matchMedia('(hover: hover) and (pointer: fine)').matches)
   const state = steps?.[steps.length - 1].state
   const turnKey = state ? `${state.turn}-${state.walls.length}` : ''
   useEffect(() => { setPending(null); setMode('move') }, [turnKey])
@@ -88,7 +89,7 @@ export function Wayward({ events, selfId, roster, canAct, onMove }) {
   return (
     <div className="wy-game">
       <p className={`wy-status${myTurn ? ' mine' : ''}`}>{status}</p>
-      <Board state={state} targets={targets} onCell={(x, y) => submit({ k: 'step', x, y })} wallMode={myTurn && mode === 'wall'} onSegment={(o, x, y) => setPending({ o, x, y })} ghost={pending} ghostBad={Boolean(problem)} />
+      <Board state={state} targets={targets} onCell={(x, y) => submit({ k: 'step', x, y })} wallMode={myTurn && mode === 'wall'} onSegment={(o, x, y) => { if (!hoverPlacement) setPending({ o, x, y }); else if (!wallProblem(state, o, x, y)) submit({ k: 'wall', o, x, y }) }} onHover={hoverPlacement ? setPending : undefined} ghost={pending} ghostBad={Boolean(problem)} />
       <Legend state={state} />
       {myTurn && (
         <div className="wy-controls">
@@ -96,8 +97,8 @@ export function Wayward({ events, selfId, roster, canAct, onMove }) {
             <button className={mode === 'move' ? 'active' : ''} onClick={() => { setMode('move'); setPending(null) }}>Move</button>
             <button className={mode === 'wall' ? 'active' : ''} onClick={() => setMode('wall')}>Wall</button>
           </div>
-          {mode === 'wall' && <p className="wy-hint">{pending ? (problem || 'Ready to place.') : 'Tap an edge. The wall covers two squares, extending right or down.'}</p>}
-          {mode === 'wall' && pending && <button className="primary-button wy-place" disabled={Boolean(problem)} onClick={() => submit({ k: 'wall', ...pending })}>Place wall</button>}
+          {mode === 'wall' && <p className="wy-hint">{hoverPlacement ? (pending ? (problem || 'Click to place.') : 'Hover an edge, then click to place. The wall covers two squares, extending right or down.') : pending ? (problem || 'Ready to place.') : 'Tap an edge. The wall covers two squares, extending right or down.'}</p>}
+          {mode === 'wall' && pending && !hoverPlacement && <button className="primary-button wy-place" disabled={Boolean(problem)} onClick={() => submit({ k: 'wall', ...pending })}>Place wall</button>}
           {mode === 'move' && !targets.length && <button className="text-button" onClick={() => submit({ k: 'pass' })}>No moves — pass</button>}
         </div>
       )}
