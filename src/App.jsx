@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import ActivityTimeline from './ActivityTimeline'
+import { Wayward } from './Wayward'
+import { SEAT_LABELS } from './waywardRules'
 import './App.css'
 
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || window.location.origin
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
 const GAMES = [
-  { id: 'chess', name: 'Chess', detail: 'Classic strategy' },
+  { id: 'wayward', name: 'Wayward', detail: 'Race to the golden center' },
   { id: 'catan', name: 'Catan', detail: 'Trade and build' },
   { id: 'ticket-to-ride', name: 'Ticket to Ride', detail: 'Routes and railways' },
   { id: 'custom', name: 'Other game', detail: 'Bring your own rules' },
@@ -34,7 +36,7 @@ function App() {
     localStorage.setItem('theme', dark ? 'dark' : 'light')
   }, [dark])
   const [roomCode, setRoomCode] = useState('')
-  const [selectedGame, setSelectedGame] = useState('chess')
+  const [selectedGame, setSelectedGame] = useState('wayward')
   const [gameStarted, setGameStarted] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [finishDialogOpen, setFinishDialogOpen] = useState(false)
@@ -43,6 +45,7 @@ function App() {
   const [finishBusy, setFinishBusy] = useState(false)
   const [peerId, setPeerId] = useState('')
   const [players, setPlayers] = useState([])
+  const [roster, setRoster] = useState([])
   const [connectedPeers, setConnectedPeers] = useState([])
   const [hostId, setHostId] = useState('')
   const [linkState, setLinkState] = useState('offline')
@@ -84,7 +87,10 @@ function App() {
     connectionsRef.current.forEach((connection) => connection.close())
   }, [])
 
-  const updatePlayers = (list) => setPlayers(list.filter((player) => player.id !== peerIdRef.current))
+  const updatePlayers = (list) => {
+    setRoster(list)
+    setPlayers(list.filter((player) => player.id !== peerIdRef.current))
+  }
 
   const sendSignal = (target, payload) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -100,7 +106,7 @@ function App() {
   }
 
   const appendEvent = (event) => {
-    setEvents((current) => current.some((item) => item.id === event.id) ? current : [...current, event].slice(-500))
+    setEvents((current) => current.some((item) => item.id === event.id) ? current : [...current, event].slice(-1500))
   }
 
   const publishEvent = (event) => {
@@ -231,7 +237,7 @@ function App() {
           updatePlayers(message.players || [])
           setHostId(message.hostId || id)
           hostIdRef.current = message.hostId || id
-          setSelectedGame(message.gameId || 'chess')
+          setSelectedGame(GAMES.some((game) => game.id === message.gameId) ? message.gameId : 'wayward')
           setGameStarted(Boolean(message.gameStarted))
           if ((message.hostId || id) === id) (message.players || []).forEach((player) => createConnection(player.id, true))
           else createConnection(message.hostId, false)
@@ -259,7 +265,7 @@ function App() {
           }
         }
         if (message.type === 'game') setSelectedGame(message.gameId)
-        if (message.type === 'game-started') { setEvents([]); setGameStarted(true) }
+        if (message.type === 'game-started') setGameStarted(true)
         if (message.type === 'game-finished') leaveLobby()
         if (message.type === 'signal') await handleSignal(message.from, message.payload)
         if (message.type === 'error') {
@@ -288,6 +294,7 @@ function App() {
   const joinLobby = () => connect('main')
 
   const leaveLobby = () => {
+    setEvents([])
     socketRef.current?.close()
     socketRef.current = null
     closeConnections()
@@ -312,6 +319,10 @@ function App() {
     if (!isHost || !connectedPeers.length) return
     socketRef.current?.send(JSON.stringify({ type: 'start' }))
     setEvents([])
+    if (selectedGame === 'wayward') {
+      const seats = roster.slice(0, 4).map((player) => ({ id: player.id, name: player.name }))
+      publishEvent({ id: makeId(), player: name.trim(), text: `Wayward begins: ${seats.map((seat, index) => `${SEAT_LABELS[index]} ${seat.name}`).join(', ')}`, time: Date.now(), move: { k: 'setup', by: peerId, seats } })
+    }
     setGameStarted(true)
   }
 
@@ -346,6 +357,8 @@ function App() {
       setFinishBusy(false)
     }
   }
+
+  const sendBoardMove = (move, text) => publishEvent({ id: makeId(), player: name.trim(), text, time: Date.now(), move })
 
   const sendTurn = (event) => {
     event.preventDefault()
@@ -401,6 +414,7 @@ function App() {
   }
 
   const logout = async () => {
+    setEvents([])
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
     socketRef.current?.close()
     closeConnections()
@@ -470,7 +484,7 @@ function App() {
               <div className="room-actions"><div><span className={`status-dot ${linkState}`} /><span>{linkState === 'connected' ? 'Direct link ready' : 'Waiting for peer links'}</span></div>{isHost && players.length > 0 && <button className="text-button" onClick={() => socketRef.current?.send(JSON.stringify({ type: 'host', target: players[0].id }))}>Pass host to {players[0].name}</button>}</div>
               <div className="host-note"><span className="note-icon">↻</span><p>Host disconnects? The table elects a new host and restores the shared turn log from players still connected.</p></div>
             </section>
-            <section className="turn-panel"><div className="section-heading"><h2>Turn log</h2><span>{events.length} EVENTS</span></div><ol className="event-list">{events.map((item, index) => <li className="event-row" key={item.id}><span className="event-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.player}</strong><p>{item.text}</p></div><time>{new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>)}{!events.length && <li className="empty-log">No turns yet. Add the first move once at least one peer link is ready.</li>}</ol><form className="turn-form" onSubmit={sendTurn}><input value={turnText} maxLength={500} onChange={(event) => setTurnText(event.target.value)} placeholder={hasTurnPath ? 'Record a move or turn…' : 'Waiting for a direct connection…'} aria-label="Turn update" disabled={!hasTurnPath} /><button className="primary-button" disabled={!hasTurnPath || !turnText.trim()}>Send turn <span aria-hidden="true">↑</span></button></form></section>
+            <section className="turn-panel"><div className="section-heading"><h2>Turn log</h2><span>{events.length} EVENTS</span></div>{selectedGame === 'wayward' && <Wayward events={events} selfId={peerId} roster={roster} canAct={hasTurnPath} onMove={sendBoardMove} />}<ol className="event-list">{events.map((item, index) => <li className="event-row" key={item.id}><span className="event-number">{String(index + 1).padStart(2, '0')}</span><div><strong>{item.player}</strong><p>{item.text}</p></div><time>{new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></li>)}{!events.length && <li className="empty-log">No turns yet.</li>}</ol>{selectedGame !== 'wayward' && <form className="turn-form" onSubmit={sendTurn}><input value={turnText} maxLength={500} onChange={(event) => setTurnText(event.target.value)} placeholder={hasTurnPath ? 'Record a move or turn…' : 'Waiting for a direct connection…'} aria-label="Turn update" disabled={!hasTurnPath} /><button className="primary-button" disabled={!hasTurnPath || !turnText.trim()}>Send turn <span aria-hidden="true">↑</span></button></form>}</section>
           </div>
         </section>
       )}

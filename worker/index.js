@@ -4,7 +4,7 @@ const SESSION_SECONDS = 12 * 60 * 60
 const APP_ORIGIN = 'https://ilikejordan.com'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_IMAGES_PER_UPLOAD = 5
-const GAMES_ALLOWED = new Set(['chess', 'catan', 'ticket-to-ride', 'custom'])
+const GAMES_ALLOWED = new Set(['wayward', 'catan', 'ticket-to-ride', 'custom'])
 const encoder = new TextEncoder()
 
 export default {
@@ -36,7 +36,7 @@ export default {
       const session = await getActiveSession(request, env)
       if (!session) return new Response('Authentication required', { status: 401 })
       if (request.method === 'POST' && request.headers.get('Origin') !== APP_ORIGIN) return new Response('Forbidden', { status: 403 })
-      if (Number(request.headers.get('Content-Length') || 0) > 262_144) return new Response('Request too large', { status: 413 })
+      if (Number(request.headers.get('Content-Length') || 0) > 1_048_576) return new Response('Request too large', { status: 413 })
       const id = env.AUTH.idFromName('auth-state')
       const headers = new Headers(request.headers)
       headers.set('x-ij-subject', session.sub)
@@ -308,11 +308,12 @@ export class AuthState {
     const rateKey = `activityrate:${subject}`
     const allowed = await this.consumeSubjectBudget(rateKey, 40, 24 * 60 * 60 * 1000)
     if (!allowed) return jsonError('Daily activity limit reached.', 429)
-    const turns = Array.isArray(data.turns) ? data.turns.slice(0, 500).filter((turn) => typeof turn?.id === 'string' && typeof turn?.text === 'string').map((turn) => ({
+    const turns = Array.isArray(data.turns) ? data.turns.slice(0, 1500).filter((turn) => typeof turn?.id === 'string' && typeof turn?.text === 'string').map((turn) => ({
       id: turn.id.slice(0, 64),
       player: safeName(turn.player),
       text: turn.text.trim().slice(0, 300),
       time: Number.isFinite(turn.time) ? turn.time : 0,
+      ...(cleanMove(turn.move) ? { move: cleanMove(turn.move) } : {}),
     })) : []
     const item = {
       id: crypto.randomUUID(),
@@ -321,6 +322,7 @@ export class AuthState {
       createdAt: new Date().toISOString(),
       author: safeName(data.author),
       title,
+      gameId: data.gameId,
       note: typeof data.note === 'string' ? data.note.trim().slice(0, 500) : '',
       turnCount: turns.length,
     }
@@ -432,10 +434,11 @@ export class LobbyRoom {
     this.peers = new Map()
     this.sockets = new Map()
     this.hostId = ''
-    this.gameId = 'chess'
+    this.gameId = 'wayward'
     this.gameStarted = false
     this.state.blockConcurrencyWhile(async () => {
-      this.gameId = await this.state.storage.get('gameId') || 'chess'
+      this.gameId = await this.state.storage.get('gameId') || 'wayward'
+      if (!GAMES_ALLOWED.has(this.gameId)) this.gameId = 'wayward'
       this.gameStarted = Boolean(await this.state.storage.get('gameStarted'))
     })
     this.state.getWebSockets().forEach((socket) => {
@@ -500,7 +503,7 @@ export class LobbyRoom {
         this.sockets.get(peerId)?.serializeAttachment(peer)
       })
       this.broadcast({ type: 'membership', hostId: this.hostId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted })
-    } else if (message.type === 'game' && ['chess', 'catan', 'ticket-to-ride', 'custom'].includes(message.gameId) && !this.gameStarted) {
+    } else if (message.type === 'game' && ['wayward', 'catan', 'ticket-to-ride', 'custom'].includes(message.gameId) && !this.gameStarted) {
       this.gameId = message.gameId
       await this.state.storage.put('gameId', this.gameId)
       this.broadcast({ type: 'game', gameId: this.gameId })
@@ -532,7 +535,7 @@ export class LobbyRoom {
     }
     if (this.peers.size) this.broadcast({ type: 'membership', hostId: this.hostId, leftId: attachment.peerId, players: this.list(), gameId: this.gameId, gameStarted: this.gameStarted })
     else {
-      this.gameId = 'chess'
+      this.gameId = 'wayward'
       this.gameStarted = false
       await this.state.storage.deleteAll()
     }
@@ -652,6 +655,17 @@ function validActivityDate(value) {
   const milliseconds = Date.parse(value)
   if (!Number.isFinite(milliseconds) || milliseconds < Date.UTC(2000, 0, 1) || milliseconds > Date.now() + 366 * 24 * 60 * 60 * 1000) return ''
   return new Date(milliseconds).toISOString()
+}
+
+function cleanMove(move) {
+  const int = (value) => Number.isInteger(value) && value >= 0 && value <= 10
+  if (!move || typeof move !== 'object') return null
+  const by = typeof move.by === 'string' ? move.by.slice(0, 64) : ''
+  if (move.k === 'setup' && Array.isArray(move.seats)) return { k: 'setup', by, seats: move.seats.slice(0, 4).map((seat) => ({ id: String(seat?.id || '').slice(0, 64), name: safeName(seat?.name) })) }
+  if (move.k === 'step' && int(move.x) && int(move.y)) return { k: 'step', by, x: move.x, y: move.y }
+  if (move.k === 'wall' && (move.o === 'h' || move.o === 'v') && int(move.x) && int(move.y)) return { k: 'wall', by, o: move.o, x: move.x, y: move.y }
+  if (move.k === 'pass' || move.k === 'skip') return { k: move.k, by }
+  return null
 }
 
 function cleanLayout(layout) {

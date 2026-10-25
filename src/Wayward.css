@@ -1,0 +1,35 @@
+.wy-game { display: grid; gap: 12px; justify-items: center; }
+.wy-board { width: 100%; max-width: 560px; height: auto; touch-action: manipulation; user-select: none; }
+.wy-cell { fill: #efede6; }
+.wy-cell.center { fill: #d8b24a; }
+.wy-cell.target { fill: #dfe5ea; cursor: pointer; }
+.wy-dot { fill: var(--green); pointer-events: none; }
+.wy-label text { fill: #9a9990; font-family: var(--mono); font-size: 9px; }
+.wy-wall { stroke: var(--ink); stroke-width: 6; stroke-linecap: round; }
+.wy-wall.ghost { stroke: var(--green); opacity: .7; }
+.wy-wall.ghost.bad { stroke: #a34f34; }
+.wy-hit { fill: transparent; cursor: pointer; }
+.wy-hit:hover { fill: #5b687433; }
+.wy-token circle { stroke: #fff; stroke-width: 2; }
+.wy-token.active circle { stroke: var(--ink); stroke-width: 3; }
+.wy-token text { fill: #fff; font-size: 13px; font-weight: 700; pointer-events: none; }
+.wy-status { margin: 0; color: var(--ink); font-family: var(--serif); font-size: 18px; text-align: center; }
+.wy-status.mine { color: var(--green); }
+.wy-hint { margin: 0; color: var(--muted); font-size: 11px; text-align: center; }
+.wy-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.wy-legend li { display: flex; align-items: center; gap: 6px; opacity: .65; }
+.wy-legend li.active { opacity: 1; }
+.wy-legend small { color: var(--muted); font-size: 10px; }
+.wy-legend em { color: #b17854; font-size: 10px; font-style: normal; font-weight: 700; }
+.wy-swatch { width: 10px; height: 10px; border-radius: 50%; }
+.wy-controls { display: grid; justify-items: center; gap: 8px; }
+.wy-place { width: auto; min-width: 150px; height: 40px; margin: 0; }
+.wy-replay { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.wy-replay .text-button { min-width: 44px; height: 32px; padding: 0 10px; }
+.wy-scrub { width: 100%; max-width: 560px; accent-color: var(--green); }
+.activity-modal.wide { width: min(640px, 100%); }
+[data-theme='dark'] .wy-cell { fill: #2a2d30; }
+[data-theme='dark'] .wy-cell.center { fill: #b08d2e; }
+[data-theme='dark'] .wy-cell.target { fill: #3a4650; }
+[data-theme='dark'] .wy-wall { stroke: #e8e8e4; }
+[data-theme='dark'] .wy-token circle { stroke: #1c1e20; }
